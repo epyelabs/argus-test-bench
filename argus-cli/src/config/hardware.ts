@@ -50,8 +50,11 @@ export const LTE = {
 /** IMU — BNO085 on I2C1, sharing the bus with the BMS/charger. */
 export const IMU = {
   i2cBus: 1,
-  /** BNO085 default 7-bit address. */
-  address: 0x4a,
+  /**
+   * BNO085 7-bit address is strap-selectable via the ADR/SA0 pin:
+   * 0x4A (default) or 0x4B. Detection accepts either.
+   */
+  addresses: [0x4a, 0x4b],
   /** Battery charger / BMS (MP2696) on the same bus — reported, not used. */
   bmsAddress: 0x6b,
   resetGpio: 4,

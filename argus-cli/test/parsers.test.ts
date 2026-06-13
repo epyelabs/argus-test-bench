@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseCameraList } from "../src/hardware/camera.js";
 import { findModemLine } from "../src/hardware/lte.js";
-import { parseI2cDetect } from "../src/hardware/imu.js";
+import { findImuAddress, parseI2cDetect } from "../src/hardware/imu.js";
 import { parseArecordList, levelFromS16 } from "../src/hardware/mic.js";
 import { parsePinctrlLevel } from "../src/hardware/led.js";
 import { IMU, LTE, MIC } from "../src/config/hardware.js";
@@ -9,6 +9,7 @@ import {
   ARECORD_L,
   ARECORD_L_NONE,
   I2CDETECT,
+  I2CDETECT_4B,
   LSUSB,
   LSUSB_NO_MODEM,
   PINCTRL_GET_HIGH,
@@ -47,13 +48,27 @@ describe("findModemLine", () => {
 describe("parseI2cDetect", () => {
   it("detects the IMU and BMS addresses", () => {
     const addrs = parseI2cDetect(I2CDETECT);
-    expect(addrs).toContain(IMU.address); // 0x4a
+    expect(addrs).toContain(0x4a);
     expect(addrs).toContain(IMU.bmsAddress); // 0x6b
   });
 
   it("ignores reserved cells and produces no phantom addresses", () => {
     const addrs = parseI2cDetect(I2CDETECT);
-    expect(addrs).toEqual([IMU.address, IMU.bmsAddress]);
+    expect(addrs).toEqual([0x4a, IMU.bmsAddress]);
+  });
+
+  it("reads the alternate strap (BNO085 at 0x4b)", () => {
+    expect(parseI2cDetect(I2CDETECT_4B)).toEqual([0x4b]);
+  });
+});
+
+describe("findImuAddress", () => {
+  it("accepts either strap address", () => {
+    expect(findImuAddress([0x4a, 0x6b])).toBe(0x4a);
+    expect(findImuAddress([0x4b])).toBe(0x4b);
+  });
+  it("returns null when the IMU is absent", () => {
+    expect(findImuAddress([0x6b])).toBeNull();
   });
 });
 

@@ -15,8 +15,18 @@ import { I2CDETECT } from "../mocks/fixtures.js";
 export interface ImuDetect {
   bus: number;
   addresses: number[];
+  /** The BNO085 address actually found (0x4A or 0x4B), or null if absent. */
+  imuAddress: number | null;
   imuPresent: boolean;
   bmsPresent: boolean;
+}
+
+/** First candidate BNO085 address present on the bus, or null. */
+export function findImuAddress(
+  present: number[],
+  candidates: readonly number[] = IMU.addresses,
+): number | null {
+  return candidates.find((addr) => present.includes(addr)) ?? null;
 }
 
 /**
@@ -43,16 +53,19 @@ export function parseI2cDetect(stdout: string): number[] {
   return addresses;
 }
 
+function buildDetect(addresses: number[]): ImuDetect {
+  const imuAddress = findImuAddress(addresses);
+  return {
+    bus: IMU.i2cBus,
+    addresses,
+    imuAddress,
+    imuPresent: imuAddress !== null,
+    bmsPresent: addresses.includes(IMU.bmsAddress),
+  };
+}
+
 export async function detectImu(): Promise<HalResult<ImuDetect>> {
-  if (isMock()) {
-    const addresses = parseI2cDetect(I2CDETECT);
-    return ok({
-      bus: IMU.i2cBus,
-      addresses,
-      imuPresent: addresses.includes(IMU.address),
-      bmsPresent: addresses.includes(IMU.bmsAddress),
-    });
-  }
+  if (isMock()) return ok(buildDetect(parseI2cDetect(I2CDETECT)));
 
   if (!(await commandExists("i2cdetect"))) {
     return unavailable("i2cdetect not found — install i2c-tools.");
@@ -61,11 +74,5 @@ export async function detectImu(): Promise<HalResult<ImuDetect>> {
   if (res.failed) {
     return unavailable(res.stderr.trim() || `i2cdetect failed on bus ${IMU.i2cBus}`);
   }
-  const addresses = parseI2cDetect(res.stdout);
-  return ok({
-    bus: IMU.i2cBus,
-    addresses,
-    imuPresent: addresses.includes(IMU.address),
-    bmsPresent: addresses.includes(IMU.bmsAddress),
-  });
+  return ok(buildDetect(parseI2cDetect(res.stdout)));
 }

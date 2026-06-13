@@ -41,8 +41,10 @@ export function ImuScreen({ onBack }: { onBack: () => void }) {
           ) : (
             <Box flexDirection="column">
               <StatusBadge status={result.data.imuPresent ? "ok" : "error"}>
-                BNO085 @ {toHexAddr(IMU.address)} —{" "}
-                {result.data.imuPresent ? "present" : "NOT found"}
+                BNO085 @ {IMU.addresses.map(toHexAddr).join(" / ")} —{" "}
+                {result.data.imuPresent
+                  ? `present (found at ${toHexAddr(result.data.imuAddress!)})`
+                  : "NOT found"}
               </StatusBadge>
               <StatusBadge status={result.data.bmsPresent ? "ok" : "unknown"}>
                 BMS (MP2696) @ {toHexAddr(IMU.bmsAddress)} —{" "}

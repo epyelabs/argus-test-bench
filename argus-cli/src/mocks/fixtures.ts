@@ -60,6 +60,18 @@ export const I2CDETECT = `     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
 70: -- -- -- -- -- -- -- --
 `;
 
+/** Alternate strap: BNO085 at 0x4b, BMS removed (matches a real eval board). */
+export const I2CDETECT_4B = `     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:                         -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- 4b -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- -- -- -- -- --
+`;
+
 /** `arecord -l` listing an I2S MEMS mic card. */
 export const ARECORD_L = `**** List of CAPTURE Hardware Devices ****
 card 0: vc4hdmi [vc4-hdmi], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
