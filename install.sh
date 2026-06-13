@@ -1,1 +1,1 @@
-# install script will be here
+# install script for the libs, drivers, etc will be here
