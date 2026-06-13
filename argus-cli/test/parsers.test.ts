@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCameraList } from "../src/hardware/camera.js";
+import { maxFps, parseCameraList } from "../src/hardware/camera.js";
 import { findModemLine } from "../src/hardware/lte.js";
 import { findImuAddress, parseI2cDetect } from "../src/hardware/imu.js";
 import { parseArecordList, levelFromS16 } from "../src/hardware/mic.js";
@@ -44,6 +44,10 @@ describe("parseCameraList", () => {
     expect(cam.modes).toContainEqual({ format: "SRGGB12_CSI2P", resolution: "1920x1080", fps: 60 });
     // 2 formats × 2 resolutions, and no phantom modes from the crop "1280x720" tokens.
     expect(cam.modes).toHaveLength(4);
+  });
+
+  it("reports the max frame rate", () => {
+    expect(maxFps(parseCameraList(RPICAM_LIST)[0])).toBe(60);
   });
 
   it("returns empty for 'No cameras available!'", () => {

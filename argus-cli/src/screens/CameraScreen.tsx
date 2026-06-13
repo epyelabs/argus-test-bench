@@ -14,6 +14,7 @@ import {
   captureStill,
   defaultCaptureDir,
   listCameras,
+  maxFps,
   modesByFormat,
   recordVideo,
 } from "../hardware/camera.js";
@@ -175,6 +176,7 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
                   { header: "#", cell: (c) => String(c.index) },
                   { header: "Sensor", cell: (c) => c.name },
                   { header: "Resolution", cell: (c) => c.maxResolution ?? "?" },
+                  { header: "Max FPS", cell: (c) => (c.modes.length ? String(maxFps(c)) : "?") },
                   { header: "Depth", cell: (c) => c.bitDepth ?? "?" },
                   { header: "Bayer", cell: (c) => c.bayer ?? "?" },
                   { header: "Bus", cell: (c) => c.bus ?? "?" },
@@ -203,8 +205,8 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
               Selected <Text color="cyan">{camera.name}</Text> (camera {camera.index})
             </Text>
             <Text color="gray">
-              {camera.maxResolution ?? "?"} · {camera.bitDepth ?? "?"} · {camera.bayer ?? "?"} ·{" "}
-              {camera.bus ?? "?"}
+              {camera.maxResolution ?? "?"} · up to {maxFps(camera)}fps · {camera.bitDepth ?? "?"} ·{" "}
+              {camera.bayer ?? "?"} · {camera.bus ?? "?"}
             </Text>
             <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
               <Text color="gray">Sensor modes</Text>

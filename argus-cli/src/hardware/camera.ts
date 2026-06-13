@@ -36,6 +36,11 @@ export interface Camera {
   modes: CameraMode[];
 }
 
+/** Highest frame rate advertised across a camera's modes (0 if none). */
+export function maxFps(cam: Camera): number {
+  return cam.modes.reduce((mx, m) => Math.max(mx, m.fps), 0);
+}
+
 /** Distinct resolution strings advertised across a camera's modes. */
 export function cameraResolutions(cam: Camera): string[] {
   const seen: string[] = [];
