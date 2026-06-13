@@ -32,7 +32,7 @@ Navigation: `↑↓` move, `↵` select, `q`/`Esc` go back, `q` on the home menu
 |--------|--------|---------|-----------------|
 | **Cameras** (CSI) | `rpicam-hello --list-cameras` | snapshot, record (res/fps/duration) | `rpicam-still`, `rpicam-vid` |
 | **LTE / GNSS** | `lsusb` (SimCom `1e0e:9011`) + `/dev/ttyUSB*` | live signal, GPS fix | telemetry JSON + NMEA on `ttyUSB1` |
-| **IMU** | `i2cdetect -y 1` (BNO085 `0x4A`) | — (data read deferred) | `i2c-tools` |
+| **IMU** | `i2cdetect -y 1` (BNO085 `0x4A`/`0x4B`) | live quaternion / Euler / linear accel | `i2c-tools` + Python BNO08x helper |
 | **Microphone** | `arecord -l` | live level meter, record to WAV | `arecord` (ALSA) |
 | **RGB LED** | `pinctrl get` | toggle R/G/B, all on/off | `pinctrl` (raspi-utils) |
 
@@ -46,6 +46,10 @@ Navigation: `↑↓` move, `↵` select, `q`/`Esc` go back, `q` on the home menu
   daemon owns. If telemetry is missing, start `sim7600-lte.service`.
 - **GPS** reads NMEA read-only from `/dev/ttyUSB1`. If no sentences arrive, GPS likely needs
   enabling on the modem (`AT+CGPS=1`); GNSS is active by default per the board straps.
+- **IMU live data** spawns [python/bno085_read.py](python/bno085_read.py), which drives the
+  Adafruit BNO08x library and streams JSON back to the CLI. Needs `python3` plus
+  `adafruit-circuitpython-bno08x` and `adafruit-blinka`. It reads at whichever address
+  detection found (`0x4A` or `0x4B`); press `d` on the IMU screen to start.
 - **RGB LED** is active-HIGH (R=GPIO12, G=GPIO21, B=GPIO16). `pinctrl` persists the pin state
   after exit, so toggles stick.
 - Captures are written to `$ARGUS_CAPTURE_DIR` (default `~/argus-captures`).
@@ -81,8 +85,6 @@ npm test
 
 ## Deferred (not in this build)
 
-- **IMU live data** — detection only for now. Reading BNO085 fused motion (accel/gyro/mag/
-  quaternion) needs the SHTP protocol via a bundled helper; planned next.
 - **UVC USB camera** — only the 2 CSI/MIPI cameras are wired up. The USB webcam is a V4L2
   device (`ffmpeg`/`v4l2-ctl`) and will be added as a third source later.
 
