@@ -9,12 +9,14 @@
 5. MIC
 6. RGB LED
 
-# Interface
+# Test bench
 
 ## Camera
 
-- Ability to take a picture (by camera source)
-- Ability to record video (by camera source)
+### Per camera source
+
+- Ability to take a picture (or pictures)
+- Ability to record video (with additional settings like fps, resolution, etc)
 
 ## 4G/LTE Module
 
