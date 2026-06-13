@@ -99,7 +99,7 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
     setResult(null);
     setError(null);
     const durationSec = untilStop ? 0 : Math.max(1, parseInt(settings.durationSec, 10) || 5);
-    const out = join(defaultCaptureDir(), `${camera.name}-cam${camera.index}-${stamp()}.h264`);
+    const out = join(defaultCaptureDir(), `${camera.name}-cam${camera.index}-${stamp()}.mp4`);
     const r = await recordVideo(
       {
         index: camera.index,

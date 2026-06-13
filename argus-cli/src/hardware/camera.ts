@@ -79,6 +79,8 @@ export interface VideoOptions {
   height?: number;
   fps?: number;
   out: string;
+  /** libav container format. Default "mp4". */
+  format?: string;
 }
 
 /** Pure parser for `rpicam-hello --list-cameras` output. */
@@ -178,7 +180,21 @@ export async function recordVideo(
   }
   await mkdir(dirOf(opts.out), { recursive: true });
 
-  const args = ["--camera", String(opts.index), "-t", String(opts.durationMs), "-o", opts.out, "-n"];
+  // The Pi 5 / CM5 has no hardware H.264 encoder (rpicam-vid's default codec),
+  // so we use the libav backend, which software-encodes straight into an MP4.
+  const args = [
+    "--camera",
+    String(opts.index),
+    "-t",
+    String(opts.durationMs),
+    "--codec",
+    "libav",
+    "--libav-format",
+    opts.format ?? "mp4",
+    "-o",
+    opts.out,
+    "-n",
+  ];
   if (opts.fps) args.push("--framerate", String(opts.fps));
   if (opts.width) args.push("--width", String(opts.width));
   if (opts.height) args.push("--height", String(opts.height));
