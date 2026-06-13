@@ -72,6 +72,12 @@ export const MIC = {
   recordFormat: "S32_LE",
   recordRate: 48000,
   recordChannels: 2,
+  /**
+   * Digital gain applied to capture. I2S MEMS mics like the SPH0645 have no
+   * hardware gain and are quiet, so we amplify in software. Override with
+   * ARGUS_MIC_GAIN. ~10–30 is typical; lower it if the meter pegs/clips.
+   */
+  defaultGain: 16,
 } as const;
 
 /** Board ID strap GPIOs (read-only). 000 = Argus CM5 Edge Video Node v1.0. */

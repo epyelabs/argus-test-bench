@@ -50,6 +50,11 @@ Navigation: `↑↓` move, `↵` select, `q`/`Esc` go back, `q` on the home menu
   Adafruit BNO08x library and streams JSON back to the CLI. Needs `python3` plus
   `adafruit-circuitpython-bno08x` and `adafruit-blinka`. It reads at whichever address
   detection found (`0x4A` or `0x4B`); press `d` on the IMU screen to start.
+- **Microphone (SPH0645)** is a quiet I2S MEMS mic with no hardware gain, so the CLI captures
+  the native S32 stream (preserving the low bits) and applies a software gain — both to the
+  live meter and to recordings, which it downmixes to a normal-loudness 16-bit WAV (picking the
+  channel the mic actually sits on). Tune with `ARGUS_MIC_GAIN` (default 16; lower it if the
+  meter pegs/clips).
 - **RGB LED** is active-HIGH (R=GPIO12, G=GPIO21, B=GPIO16). `pinctrl` persists the pin state
   after exit, so toggles stick.
 - Captures are written to `$ARGUS_CAPTURE_DIR` (default `~/argus-captures`).

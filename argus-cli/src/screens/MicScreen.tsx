@@ -14,6 +14,7 @@ import {
   type AudioLevel,
   type MicDevice,
   listMics,
+  micGain,
   recordAudio,
   startMeter,
 } from "../hardware/mic.js";
@@ -184,7 +185,10 @@ export function MicScreen({ onBack }: { onBack: () => void }) {
 
         {phase === "meter" ? (
           <Box flexDirection="column">
-            <Text color="cyan">Live input level — make some noise</Text>
+            <Text color="cyan">
+              Live input level — make some noise{" "}
+              <Text color="gray">(gain ×{micGain()}, set ARGUS_MIC_GAIN to tune)</Text>
+            </Text>
             <Box marginTop={1} flexDirection="column">
               <LevelMeter level={level.rms} peak={level.peak} label="RMS " width={44} />
             </Box>

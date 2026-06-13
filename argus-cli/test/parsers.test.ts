@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { encoderHint, maxFps, parseCameraList } from "../src/hardware/camera.js";
 import { findModemLine } from "../src/hardware/lte.js";
 import { findImuAddress, parseI2cDetect } from "../src/hardware/imu.js";
-import { parseArecordList, levelFromS16 } from "../src/hardware/mic.js";
+import {
+  parseArecordList,
+  levelFromS16,
+  levelFromS32,
+  s32StereoToMonoS16,
+  encodeWavPcm16,
+} from "../src/hardware/mic.js";
 import { parsePinctrlLevel } from "../src/hardware/led.js";
 import { IMU, LTE, MIC } from "../src/config/hardware.js";
 import {
@@ -139,5 +145,64 @@ describe("levelFromS16", () => {
   });
   it("returns zero for an empty buffer", () => {
     expect(levelFromS16(Buffer.alloc(0))).toEqual({ rms: 0, peak: 0 });
+  });
+});
+
+describe("levelFromS32 (gain + louder-channel)", () => {
+  it("amplifies a quiet signal by the gain", () => {
+    // One stereo frame: left ~1/16 full-scale, right silent.
+    const buf = Buffer.alloc(8);
+    buf.writeInt32LE(Math.round(2147483648 / 16), 0);
+    buf.writeInt32LE(0, 4);
+    const ungained = levelFromS32(buf, 1, 2);
+    const gained = levelFromS32(buf, 16, 2);
+    expect(gained.peak).toBeGreaterThan(ungained.peak * 10);
+    expect(gained.peak).toBeCloseTo(1, 2); // 1/16 * 16 ≈ full scale
+  });
+
+  it("picks the channel that actually carries signal", () => {
+    // Mic on the RIGHT channel, left silent — must not read as silence.
+    const buf = Buffer.alloc(8);
+    buf.writeInt32LE(0, 0);
+    buf.writeInt32LE(Math.round(2147483648 / 8), 4);
+    expect(levelFromS32(buf, 1, 2).peak).toBeGreaterThan(0.1);
+  });
+});
+
+describe("s32StereoToMonoS16", () => {
+  it("downmixes the louder channel with gain into 16-bit", () => {
+    const buf = Buffer.alloc(8 * 2); // two frames
+    // Right channel carries a small signal; left is silent.
+    buf.writeInt32LE(0, 0);
+    buf.writeInt32LE(Math.round(2147483648 / 1000), 4);
+    buf.writeInt32LE(0, 8);
+    buf.writeInt32LE(Math.round(2147483648 / 1000), 12);
+    const mono = s32StereoToMonoS16(buf, 16, 2);
+    expect(mono).toHaveLength(2);
+    // (2^31/1000 / 65536) * 16 ≈ 524 — audible, and well within int16 range.
+    expect(mono[0]).toBeGreaterThan(100);
+    expect(mono[0]).toBeLessThan(32768);
+  });
+
+  it("clamps rather than wrapping on overload", () => {
+    const buf = Buffer.alloc(8);
+    buf.writeInt32LE(2147483647, 0);
+    buf.writeInt32LE(0, 4);
+    expect(s32StereoToMonoS16(buf, 64, 2)[0]).toBe(32767);
+  });
+});
+
+describe("encodeWavPcm16", () => {
+  it("writes a valid canonical WAV header", () => {
+    const wav = encodeWavPcm16(Int16Array.from([0, 1000, -1000, 32767]), 48000);
+    expect(wav.length).toBe(44 + 4 * 2);
+    expect(wav.toString("ascii", 0, 4)).toBe("RIFF");
+    expect(wav.toString("ascii", 8, 12)).toBe("WAVE");
+    expect(wav.toString("ascii", 36, 40)).toBe("data");
+    expect(wav.readUInt16LE(22)).toBe(1); // mono
+    expect(wav.readUInt32LE(24)).toBe(48000); // sample rate
+    expect(wav.readUInt16LE(34)).toBe(16); // bits per sample
+    expect(wav.readUInt32LE(40)).toBe(8); // data bytes
+    expect(wav.readInt16LE(44 + 2)).toBe(1000);
   });
 });
