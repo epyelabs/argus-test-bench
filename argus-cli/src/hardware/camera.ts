@@ -36,6 +36,26 @@ export interface Camera {
   modes: CameraMode[];
 }
 
+/**
+ * Map a known fatal rpicam-vid stderr line to an actionable message.
+ *
+ * The Pi 5 / CM5 has no hardware video encoder, so rpicam-vid relies on libav
+ * (software). The Lite image ships `rpicam-apps-lite`, which omits libav —
+ * hence "Unrecognised codec libav" / "Unable to find an appropriate H.264 codec".
+ */
+export function encoderHint(line: string): string | null {
+  if (/unrecognised codec|unrecognized codec/i.test(line)) {
+    return "rpicam-apps was built without libav. Video needs it — install the full package: sudo apt install rpicam-apps";
+  }
+  if (/unable to find an appropriate .*codec/i.test(line)) {
+    return "No H.264 encoder (the Pi 5/CM5 has none). Install the libav build: sudo apt install rpicam-apps";
+  }
+  if (/libav: unable to open video codec/i.test(line)) {
+    return "libav could not open the video codec — check that rpicam-apps and its libav libraries match.";
+  }
+  return null;
+}
+
 /** Highest frame rate advertised across a camera's modes (0 if none). */
 export function maxFps(cam: Camera): number {
   return cam.modes.reduce((mx, m) => Math.max(mx, m.fps), 0);

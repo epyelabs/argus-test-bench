@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { maxFps, parseCameraList } from "../src/hardware/camera.js";
+import { encoderHint, maxFps, parseCameraList } from "../src/hardware/camera.js";
 import { findModemLine } from "../src/hardware/lte.js";
 import { findImuAddress, parseI2cDetect } from "../src/hardware/imu.js";
 import { parseArecordList, levelFromS16 } from "../src/hardware/mic.js";
@@ -48,6 +48,14 @@ describe("parseCameraList", () => {
 
   it("reports the max frame rate", () => {
     expect(maxFps(parseCameraList(RPICAM_LIST)[0])).toBe(60);
+  });
+
+  it("turns rpicam-vid codec errors into install guidance", () => {
+    expect(encoderHint("ERROR: *** Unrecognised codec libav ***")).toMatch(/sudo apt install rpicam-apps/);
+    expect(encoderHint("ERROR: *** Unable to find an appropriate H.264 codec ***")).toMatch(
+      /sudo apt install rpicam-apps/,
+    );
+    expect(encoderHint("[2:01] INFO Camera configuring streams")).toBeNull();
   });
 
   it("returns empty for 'No cameras available!'", () => {

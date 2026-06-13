@@ -37,6 +37,10 @@ Navigation: `↑↓` move, `↵` select, `q`/`Esc` go back, `q` on the home menu
 | **RGB LED** | `pinctrl get` | toggle R/G/B, all on/off | `pinctrl` (raspi-utils) |
 
 ### Notes per module
+- **Video recording** uses `rpicam-vid --codec libav` → MP4. The Pi 5 / CM5 has no hardware
+  H.264 encoder, so libav (software) does the encoding. The Lite image ships
+  `rpicam-apps-lite` which lacks libav — if recording errors with "Unrecognised codec libav",
+  install the full package: `sudo apt install rpicam-apps`. Snapshots work either way.
 - **LTE signal** is read from the connection-manager daemon's atomic telemetry at
   `/run/sim7600-lte/telemetry.json` — the CLI never opens the AT port (`ttyUSB2`), which the
   daemon owns. If telemetry is missing, start `sim7600-lte.service`.

@@ -13,6 +13,7 @@ import {
   type Camera,
   captureStill,
   defaultCaptureDir,
+  encoderHint,
   listCameras,
   maxFps,
   modesByFormat,
@@ -47,6 +48,8 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
   const [activeField, setActiveField] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const handleRef = useRef<StreamHandle | null>(null);
+  // Set when rpicam-vid prints a fatal encoder error so we don't report success.
+  const recErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -100,6 +103,7 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
     setError(null);
     const durationSec = untilStop ? 0 : Math.max(1, parseInt(settings.durationSec, 10) || 5);
     const out = join(defaultCaptureDir(), `${camera.name}-cam${camera.index}-${stamp()}.mp4`);
+    recErrorRef.current = null;
     const r = await recordVideo(
       {
         index: camera.index,
@@ -109,7 +113,15 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
         height: numOrUndef(settings.height),
         out,
       },
-      { onStderr: (line) => line.trim() && appendLog(line.trim()) },
+      {
+        onStderr: (line) => {
+          const t = line.trim();
+          if (!t) return;
+          appendLog(t);
+          const hint = encoderHint(t);
+          if (hint && !recErrorRef.current) recErrorRef.current = hint;
+        },
+      },
     );
     if (!r.available) {
       setError(r.reason);
@@ -121,7 +133,8 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
     setPhase("recording");
     r.data.handle.done.then((res) => {
       handleRef.current = null;
-      if (res.failed && res.notFound) setError(res.stderr);
+      if (recErrorRef.current) setError(recErrorRef.current);
+      else if (res.failed && res.notFound) setError(res.stderr);
       else setResult(`Saved video → ${r.data.path}`);
       setPhase("result");
     });
