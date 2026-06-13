@@ -1,0 +1,8 @@
+# /etc/udev/rules.d/99-sim7600-lte.rules
+# Triggers the sim7600-lte systemd service when the modem's AT port enumerates.
+# Avoids relying on fixed sleep timers — fires exactly when the device is ready.
+#
+# Adjust KERNEL=="ttyUSB2" if your AT command port lands on a different node.
+# Check with: ls /dev/ttyUSB* after plugging in the modem.
+
+SUBSYSTEM=="tty", KERNEL=="ttyUSB2", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sim7600-lte.service"

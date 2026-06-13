@@ -1,0 +1,40 @@
+[Unit]
+Description=SIM7600 Resilient LTE Connection Manager
+Documentation=https://github.com/your-repo/sim7600-lte
+# Start after basic system init, but before most network-dependent services
+After=systemd-udevd.service
+Wants=systemd-udevd.service
+# Prevent conflict with ModemManager if installed
+Conflicts=ModemManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sim7600-lte.sh
+Restart=always
+RestartSec=10
+
+# Configurable overrides via environment (or drop-in override file)
+# Create /etc/systemd/system/sim7600-lte.service.d/override.conf to customize:
+#   [Service]
+#   Environment="SIM7600_SERIAL=/dev/ttyUSB2"
+#   Environment="SIM7600_IFACE=usb0"
+#   Environment="SIM7600_PING_HOST=8.8.8.8"
+#   Environment="SIM7600_MIN_CSQ=10"
+#   Environment="SIM7600_GOOD_CSQ=15"
+Environment="SIM7600_SERIAL=/dev/ttyUSB2"
+Environment="SIM7600_IFACE=usb0"
+Environment="SIM7600_PING_HOST=8.8.8.8"
+Environment="SIM7600_MIN_CSQ=10"
+Environment="SIM7600_GOOD_CSQ=15"
+
+# Output goes to journald (use: journalctl -u sim7600-lte -f)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sim7600-lte
+
+# Give the script enough time to wait for signal on startup
+TimeoutStartSec=120
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
