@@ -39,6 +39,12 @@ export function toHexAddr(addr: number): string {
   return `0x${addr.toString(16).padStart(2, "0")}`;
 }
 
+/** Fixed-decimal with an explicit sign, e.g. +0.853 / -0.04 — for sensor readouts. */
+export function signedFixed(n: number, dp: number): string {
+  const v = n.toFixed(dp);
+  return v.startsWith("-") ? v : `+${v}`;
+}
+
 /** Timestamp slug safe for filenames, derived from an ISO string. */
 export function fileStamp(iso: string): string {
   return iso.replace(/[:.]/g, "-").replace(/[^0-9A-Za-z-]/g, "");

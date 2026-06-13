@@ -66,6 +66,18 @@ describe("UI smoke (mock mode)", () => {
     unmount();
   });
 
+  it("IMU screen streams live motion data on 'd'", async () => {
+    const { lastFrame, stdin, unmount } = render(<ImuScreen onBack={noop} />);
+    await delay(60);
+    stdin.write("d");
+    await delay(150);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("quat");
+    expect(frame).toContain("euler");
+    expect(frame).toContain("m/s²");
+    unmount();
+  });
+
   it("mic screen lists capture devices and flags the I2S mic", async () => {
     const { lastFrame, unmount } = render(<MicScreen onBack={noop} />);
     await delay(60);
