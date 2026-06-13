@@ -19,13 +19,31 @@ import {
 } from "../src/mocks/fixtures.js";
 
 describe("parseCameraList", () => {
-  it("parses two CSI cameras with modes", () => {
+  it("parses sensor metadata from the header bracket", () => {
     const cams = parseCameraList(RPICAM_LIST);
     expect(cams).toHaveLength(2);
-    expect(cams[0]).toMatchObject({ index: 0, name: "imx708", maxResolution: "4608x2592" });
-    expect(cams[0].modes).toContain("1536x864");
-    expect(cams[1]).toMatchObject({ index: 1, name: "ov5647" });
-    expect(cams[0].devicePath).toContain("imx708");
+    expect(cams[0]).toMatchObject({
+      index: 0,
+      name: "imx290",
+      maxResolution: "1920x1080",
+      bitDepth: "12-bit",
+      bayer: "RGGB",
+      bus: "i2c@88000",
+    });
+  });
+
+  it("distinguishes the two CSI ports by i2c bus", () => {
+    const cams = parseCameraList(RPICAM_LIST);
+    expect(cams[0].bus).toBe("i2c@88000");
+    expect(cams[1].bus).toBe("i2c@70000");
+  });
+
+  it("parses per-format modes with fps, skipping crop sizes", () => {
+    const cam = parseCameraList(RPICAM_LIST)[0];
+    expect(cam.modes).toContainEqual({ format: "SRGGB10_CSI2P", resolution: "1280x720", fps: 60 });
+    expect(cam.modes).toContainEqual({ format: "SRGGB12_CSI2P", resolution: "1920x1080", fps: 60 });
+    // 2 formats × 2 resolutions, and no phantom modes from the crop "1280x720" tokens.
+    expect(cam.modes).toHaveLength(4);
   });
 
   it("returns empty for 'No cameras available!'", () => {

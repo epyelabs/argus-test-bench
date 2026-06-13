@@ -25,11 +25,15 @@ describe("UI smoke (mock mode)", () => {
     unmount();
   });
 
-  it("camera screen lists the mock CSI cameras", async () => {
+  it("camera screen lists the mock CSI cameras with detail", async () => {
     const { lastFrame, unmount } = render(<CameraScreen onBack={noop} />);
     await delay(60);
-    expect(lastFrame()).toContain("imx708");
-    expect(lastFrame()).toContain("ov5647");
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("imx290");
+    expect(frame).toContain("12-bit");
+    expect(frame).toContain("RGGB");
+    expect(frame).toContain("i2c@88000"); // the two ports are distinguishable
+    expect(frame).toContain("i2c@70000");
     unmount();
   });
 

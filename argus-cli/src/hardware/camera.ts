@@ -13,14 +13,48 @@ import { isMock } from "../lib/platform.js";
 import { ok, unavailable, type HalResult } from "./types.js";
 import { RPICAM_LIST } from "../mocks/fixtures.js";
 
+/** One sensor mode: a pixel format at a resolution and its max frame rate. */
+export interface CameraMode {
+  /** Pixel format token, e.g. "SRGGB10_CSI2P". */
+  format: string;
+  resolution: string;
+  fps: number;
+}
+
 export interface Camera {
   index: number;
   name: string;
-  /** Native max resolution string from the header bracket, e.g. "4608x2592". */
+  /** Native max resolution from the header bracket, e.g. "1920x1080". */
   maxResolution?: string;
+  /** Bit depth from the bracket, e.g. "12-bit". */
+  bitDepth?: string;
+  /** Bayer/colour token from the bracket, e.g. "RGGB" or "MONO". */
+  bayer?: string;
   devicePath?: string;
-  /** Distinct resolution strings advertised in the Modes block. */
-  modes: string[];
+  /** I2C node from the device path, e.g. "i2c@88000" — distinguishes the CSI ports. */
+  bus?: string;
+  modes: CameraMode[];
+}
+
+/** Distinct resolution strings advertised across a camera's modes. */
+export function cameraResolutions(cam: Camera): string[] {
+  const seen: string[] = [];
+  for (const m of cam.modes) if (!seen.includes(m.resolution)) seen.push(m.resolution);
+  return seen;
+}
+
+/** Group a camera's modes by pixel format, preserving first-seen order. */
+export function modesByFormat(cam: Camera): { format: string; modes: CameraMode[] }[] {
+  const groups: { format: string; modes: CameraMode[] }[] = [];
+  for (const m of cam.modes) {
+    let g = groups.find((x) => x.format === m.format);
+    if (!g) {
+      g = { format: m.format, modes: [] };
+      groups.push(g);
+    }
+    g.modes.push(m);
+  }
+  return groups;
 }
 
 export interface StillOptions {
@@ -47,30 +81,39 @@ export function parseCameraList(stdout: string): Camera[] {
   const cameras: Camera[] = [];
   const lines = stdout.split("\n");
   let current: Camera | null = null;
+  let currentFormat = "";
 
   const header = /^\s*(\d+)\s*:\s*(\S+)\s*\[([^\]]*)\]\s*(?:\((.+)\))?/;
-  const resToken = /(\d{3,5}x\d{3,5})/g;
+  // Resolution immediately followed by an "[ <n> fps" block — skips crop sizes.
+  const modeRe = /(\d{3,5}x\d{3,5})\s*\[\s*([\d.]+)\s*fps/g;
+  const formatRe = /'([^']+)'/;
 
   for (const line of lines) {
     const h = line.match(header);
     if (h) {
       if (current) cameras.push(current);
       const bracket = h[3] ?? "";
-      const maxRes = bracket.match(/(\d{3,5}x\d{3,5})/)?.[1];
+      const depth = bracket.match(/(\d+)-bit\s+(\S+)/);
       current = {
         index: parseInt(h[1], 10),
         name: h[2],
-        maxResolution: maxRes,
+        maxResolution: bracket.match(/(\d{3,5}x\d{3,5})/)?.[1],
+        bitDepth: depth ? `${depth[1]}-bit` : undefined,
+        bayer: depth?.[2],
         devicePath: h[4],
+        bus: h[4]?.match(/(i2c@\w+)/)?.[1],
         modes: [],
       };
+      currentFormat = "";
       continue;
     }
-    if (current) {
-      const found = line.match(resToken);
-      if (found) {
-        for (const r of found) if (!current.modes.includes(r)) current.modes.push(r);
-      }
+    if (!current) continue;
+
+    const fmt = line.match(formatRe);
+    if (fmt) currentFormat = fmt[1];
+
+    for (const m of line.matchAll(modeRe)) {
+      current.modes.push({ format: currentFormat, resolution: m[1], fps: parseFloat(m[2]) });
     }
   }
   if (current) cameras.push(current);

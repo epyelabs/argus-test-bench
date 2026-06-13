@@ -14,6 +14,7 @@ import {
   captureStill,
   defaultCaptureDir,
   listCameras,
+  modesByFormat,
   recordVideo,
 } from "../hardware/camera.js";
 import { join } from "node:path";
@@ -173,14 +174,19 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
                 columns={[
                   { header: "#", cell: (c) => String(c.index) },
                   { header: "Sensor", cell: (c) => c.name },
-                  { header: "Max", cell: (c) => c.maxResolution ?? "?" },
-                  { header: "Modes", cell: (c) => c.modes.slice(0, 3).join(" ") },
+                  { header: "Resolution", cell: (c) => c.maxResolution ?? "?" },
+                  { header: "Depth", cell: (c) => c.bitDepth ?? "?" },
+                  { header: "Bayer", cell: (c) => c.bayer ?? "?" },
+                  { header: "Bus", cell: (c) => c.bus ?? "?" },
                 ]}
                 rows={cameras}
               />
               <Box marginTop={1}>
                 <SelectInput
-                  items={cameras.map((c) => ({ label: `${c.index}: ${c.name}`, value: c.index }))}
+                  items={cameras.map((c) => ({
+                    label: `${c.index}: ${c.name}${c.bus ? ` (${c.bus})` : ""}`,
+                    value: c.index,
+                  }))}
                   onSelect={(item) => {
                     setCamera(cameras.find((c) => c.index === item.value) ?? null);
                     setPhase("actions");
@@ -196,6 +202,19 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
             <Text>
               Selected <Text color="cyan">{camera.name}</Text> (camera {camera.index})
             </Text>
+            <Text color="gray">
+              {camera.maxResolution ?? "?"} · {camera.bitDepth ?? "?"} · {camera.bayer ?? "?"} ·{" "}
+              {camera.bus ?? "?"}
+            </Text>
+            <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
+              <Text color="gray">Sensor modes</Text>
+              {modesByFormat(camera).map((g) => (
+                <Text key={g.format}>
+                  <Text color="cyan">{g.format}</Text>{" "}
+                  {g.modes.map((m) => `${m.resolution}@${m.fps}`).join("  ")}
+                </Text>
+              ))}
+            </Box>
             <Text color="gray">
               res {settings.width || "full"}×{settings.height || "full"}  ·  {settings.fps}fps  ·{" "}
               {settings.durationSec}s

@@ -6,18 +6,20 @@
  * exercised against realistic text, not idealized strings.
  */
 
-/** `rpicam-hello --list-cameras` with two CSI cameras attached. */
+/** `rpicam-hello --list-cameras` — two imx290 CSI cameras (real Argus board output). */
 export const RPICAM_LIST = `Available cameras
 -----------------
-0 : imx708 [4608x2592 10-bit RGGB] (/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a)
-    Modes: 'SRGGB10_CSI2P' : 1536x864 [120.13 fps - (768, 432)/3072x1728 crop]
-                             2304x1296 [56.03 fps - (0, 0)/4608x2592 crop]
-                             4608x2592 [14.35 fps - (0, 0)/4608x2592 crop]
+0 : imx290 [1920x1080 12-bit RGGB] (/base/axi/pcie@1000120000/rp1/i2c@88000/imx290@1a)
+    Modes: 'SRGGB10_CSI2P' : 1280x720 [60.00 fps - (320, 180)/1280x720 crop]
+                             1920x1080 [60.00 fps - (0, 0)/1920x1080 crop]
+           'SRGGB12_CSI2P' : 1280x720 [60.00 fps - (320, 180)/1280x720 crop]
+                             1920x1080 [60.00 fps - (0, 0)/1920x1080 crop]
 
-1 : ov5647 [2592x1944 10-bit GBRG] (/base/axi/pcie@120000/rp1/i2c@80000/ov5647@36)
-    Modes: 'SGBRG10_CSI2P' : 640x480 [58.92 fps - (16, 0)/2560x1920 crop]
-                             1296x972 [43.25 fps - (0, 0)/2592x1944 crop]
-                             2592x1944 [15.63 fps - (0, 0)/2592x1944 crop]
+1 : imx290 [1920x1080 12-bit RGGB] (/base/axi/pcie@1000120000/rp1/i2c@70000/imx290@1a)
+    Modes: 'SRGGB10_CSI2P' : 1280x720 [60.00 fps - (320, 180)/1280x720 crop]
+                             1920x1080 [60.00 fps - (0, 0)/1920x1080 crop]
+           'SRGGB12_CSI2P' : 1280x720 [60.00 fps - (320, 180)/1280x720 crop]
+                             1920x1080 [60.00 fps - (0, 0)/1920x1080 crop]
 `;
 
 /** `rpicam-hello --list-cameras` when no cameras are detected. */
