@@ -117,7 +117,7 @@ export function DashboardScreen() {
 
   return (
     <Box flexDirection="column">
-      <Header title="Dashboard" />
+      <Header />
       <Box flexDirection={twoCol ? "row" : "column"}>
         {list}
         {detail}

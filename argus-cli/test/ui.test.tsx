@@ -34,7 +34,7 @@ describe("UI smoke (mock mode)", () => {
     await delay(150);
     const frame = lastFrame() ?? "";
     expect(frame).toContain("ARGUS Test Bench");
-    expect(frame).toContain("Dashboard");
+    expect(frame).toContain("CPU"); // header renders live system metrics
     // The left list pins every module at once…
     expect(frame).toContain("LTE / GNSS");
     expect(frame).toContain("IMU");
