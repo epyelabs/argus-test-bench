@@ -43,6 +43,9 @@ export function DashboardScreen() {
   const { exit } = useApp();
   const { columns } = useTerminalSize();
   const twoCol = columns >= NARROW_THRESHOLD;
+  // Pin the detail pane's width so long log lines truncate instead of widening
+  // the box (which would shove the list around). columns - list - detail margin.
+  const detailWidth = twoCol ? columns - LIST_WIDTH - 1 : undefined;
 
   const [selected, setSelected] = useState(0);
   const [operating, setOperating] = useState(false);
@@ -94,7 +97,8 @@ export function DashboardScreen() {
 
   const detail = (
     <Box
-      flexGrow={1}
+      flexGrow={twoCol ? 0 : 1}
+      width={detailWidth}
       flexDirection="column"
       borderStyle="round"
       borderColor={operating ? "cyan" : "gray"}

@@ -12,7 +12,9 @@ export function LogView({
 }) {
   const tail = lines.slice(-maxLines);
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+    // width 100% so it fills the pane (parent is a row) and truncate-end has a
+    // width to clamp to, instead of growing to the widest log line.
+    <Box width="100%" flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
       <Text color="gray">{title}</Text>
       {tail.length === 0 ? (
         <Text color="gray" dimColor>
