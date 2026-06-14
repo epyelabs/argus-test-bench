@@ -22,10 +22,19 @@ export function Header() {
           ARGUS Test Bench
         </Text>
         <Box>
-          <Text color={isMock() ? "yellow" : "green"}>{hostLabel()}</Text>
+          <Text color={isMock() ? "yellow" : "gray"}>{hostLabel()}</Text>
           <Text color="gray">{`  ${m.os.pretty} ${m.os.arch}`}</Text>
         </Box>
       </Box>
+
+      {/* Divider between identity and the live metrics. */}
+      <Box
+        borderStyle="single"
+        borderColor="gray"
+        borderTop={false}
+        borderLeft={false}
+        borderRight={false}
+      />
 
       {/* CPU: overall + per-core (left), temperature (right). Falls back to an
           aggregate on many-core hosts so the row never overflows the box. */}
