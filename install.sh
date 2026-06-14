@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOT_CONFIG="/boot/firmware/config.txt"
 
 # Ordered list of steps run when no argument is given.
-STEPS=(step1 step2 step3 step4 step5)
+STEPS=(step1 step2 step3 step4 step5 step6)
 
 # STEP 1: Install Nodejs (using nvm)
 step1() {
@@ -108,7 +108,12 @@ step5() {
   echo "[install] Mic config done — reboot required. Verify with: arecord -l"
 }
 
-# STEP 6 - LTE: just run `argus-test-bench/argus-connection-manager/install.sh`?
+# STEP 6 - LTE: run the self-contained sim7600 connection-manager installer.
+step6() {
+  echo "[install] Installing LTE connection manager..."
+  # Nested installer is self-contained (resolves its own dir, sudoes internally).
+  bash "$SCRIPT_DIR/argus-connection-manager/install.sh"
+}
 
 usage() {
   echo "Usage: $(basename "$0") [step]"
