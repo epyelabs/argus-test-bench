@@ -80,15 +80,10 @@ step4() {
   sudo python3 -m pip install --break-system-packages \
     adafruit-circuitpython-bno08x adafruit-blinka
 
-  echo "[install] Enabling I2C bus 1 in $BOOT_CONFIG..."
-  if sudo grep -qxF "dtparam=i2c_arm=on" "$BOOT_CONFIG"; then
-    echo "[install] I2C already enabled, skipping."
-  elif sudo grep -qE '^\s*#?\s*dtparam=i2c_arm=' "$BOOT_CONFIG"; then
-    # Default Bookworm config.txt ships this line commented — normalize it to on.
-    sudo sed -i -E 's/^\s*#?\s*dtparam=i2c_arm=.*/dtparam=i2c_arm=on/' "$BOOT_CONFIG"
-  else
-    echo "dtparam=i2c_arm=on" | sudo tee -a "$BOOT_CONFIG" >/dev/null
-  fi
+  echo "[install] Enabling I2C bus (raspi-config)..."
+  # Canonical enabler: writes dtparam=i2c_arm=on to config.txt AND loads the i2c-dev
+  # module so /dev/i2c-1 comes up. Idempotent. (0 = enable in raspi-config's convention.)
+  sudo raspi-config nonint do_i2c 0
 
   echo "[install] IMU setup done — reboot required for I2C to come up. Verify with: i2cdetect -y 1"
 }
