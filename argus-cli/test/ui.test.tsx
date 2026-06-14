@@ -52,8 +52,8 @@ describe("UI smoke (mock mode)", () => {
     const { lastFrame, stdin, unmount } = render(<App />);
     await delay(120);
     expect(lastFrame()).not.toContain("imx290"); // LTE selected, Camera hidden
-    // LTE → IMU → LED → Mic → Camera (index 4).
-    await pressArrow(stdin, "down", 4);
+    // LTE → Cameras (index 1).
+    await pressArrow(stdin, "down", 1);
     await delay(60);
     const frame = lastFrame() ?? "";
     expect(frame).toContain("imx290"); // Camera detail now shown
@@ -64,7 +64,7 @@ describe("UI smoke (mock mode)", () => {
   it("Enter operates the selected module (process runs in the detail pane)", async () => {
     const { lastFrame, stdin, unmount } = render(<App />);
     await delay(120);
-    await pressArrow(stdin, "down", 1); // select IMU
+    await pressArrow(stdin, "down", 3); // select IMU
     await delay(20);
     stdin.write("\r"); // enter the detail to operate it
     await delay(20);
@@ -79,7 +79,7 @@ describe("UI smoke (mock mode)", () => {
   it("keeps the IMU stream running after leaving and navigating away", async () => {
     const { lastFrame, stdin, unmount } = render(<App />);
     await delay(120);
-    await pressArrow(stdin, "down", 1); // select IMU
+    await pressArrow(stdin, "down", 3); // select IMU
     await delay(20);
     stdin.write("\r"); // operate
     await delay(20);

@@ -15,10 +15,10 @@ import { CameraScreen } from "./CameraScreen.js";
 /** Module list — order = list order = the index the dashboard navigates. */
 const MODULES = [
   { id: "lte", title: "LTE / GNSS", View: LteScreen },
+  { id: "camera", title: "Cameras", View: CameraScreen },
+  { id: "mic", title: "Microphone", View: MicScreen },
   { id: "imu", title: "IMU", View: ImuScreen },
   { id: "led", title: "RGB LED", View: LedScreen },
-  { id: "mic", title: "Microphone", View: MicScreen },
-  { id: "camera", title: "Cameras", View: CameraScreen },
 ] as const;
 
 /** Fixed left-list width; below this terminal width we stack list over detail. */
