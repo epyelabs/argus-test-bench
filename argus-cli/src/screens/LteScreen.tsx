@@ -66,7 +66,7 @@ export function LteScreen({
       statusLabel = "no telemetry";
       statusKind = "warn";
     } else {
-      statusLabel = `${telem.data.status} · CSQ ${telem.data.csq}`;
+      statusLabel = `CSQ ${telem.data.csq}`;
       statusKind = STATUS_MAP[telem.data.status] ?? "unknown";
     }
   }
