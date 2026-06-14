@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useApp, useInput } from "ink";
+import { DashboardScreen } from "./screens/DashboardScreen.js";
 import { HomeScreen } from "./screens/HomeScreen.js";
 import { CameraScreen } from "./screens/CameraScreen.js";
 import { LteScreen } from "./screens/LteScreen.js";
@@ -7,16 +8,17 @@ import { ImuScreen } from "./screens/ImuScreen.js";
 import { MicScreen } from "./screens/MicScreen.js";
 import { LedScreen } from "./screens/LedScreen.js";
 
-export type Screen = "home" | "camera" | "lte" | "imu" | "mic" | "led";
+export type Screen = "dashboard" | "home" | "camera" | "lte" | "imu" | "mic" | "led";
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>("home");
+  const [screen, setScreen] = useState<Screen>("dashboard");
   const { exit } = useApp();
-  const back = () => setScreen("home");
+  const back = () => setScreen("dashboard");
 
-  // From the home menu, `q` quits the app outright.
+  // From the dashboard, `q` quits the app outright. No panel consumes `q`, so
+  // this never collides with a focused section's keys.
   useInput((input) => {
-    if (screen === "home" && (input === "q" || input === "Q")) exit();
+    if (screen === "dashboard" && (input === "q" || input === "Q")) exit();
   });
 
   switch (screen) {
@@ -31,7 +33,9 @@ export function App() {
     case "led":
       return <LedScreen onBack={back} />;
     case "home":
-    default:
       return <HomeScreen onSelect={setScreen} />;
+    case "dashboard":
+    default:
+      return <DashboardScreen onOpen={setScreen} />;
   }
 }

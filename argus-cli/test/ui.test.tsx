@@ -10,18 +10,68 @@ import { LedScreen } from "../src/screens/LedScreen.js";
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const noop = () => {};
 
+// Ink advances focus once per stdin data event, so Tab presses must be sent
+// as separate writes (a single "\t\t" chunk only moves focus once).
+async function pressTab(stdin: { write: (s: string) => void }, times = 1) {
+  for (let i = 0; i < times; i++) {
+    stdin.write("\t");
+    await delay(20);
+  }
+}
+
 // Force the HAL into fixture mode so the UI is deterministic on any host.
 beforeAll(() => {
   process.env.ARGUS_MOCK = "1";
 });
 
 describe("UI smoke (mock mode)", () => {
-  it("renders the home menu", async () => {
+  it("renders the dashboard with all module sections by default", async () => {
     const { lastFrame, unmount } = render(<App />);
-    await delay(30);
-    expect(lastFrame()).toContain("ARGUS Test Bench");
-    expect(lastFrame()).toContain("Cameras");
-    expect(lastFrame()).toContain("RGB LED");
+    await delay(120);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("ARGUS Test Bench");
+    expect(frame).toContain("Dashboard");
+    // All five sections present at once…
+    expect(frame).toContain("SIM7600"); // LTE / GNSS
+    expect(frame).toContain("BNO085"); // IMU
+    expect(frame).toContain("RGB LED"); // LED
+    expect(frame).toContain("I2S MEMS"); // Microphone
+    expect(frame).toContain("CSI + USB"); // Cameras
+    // …populated with live fixture data.
+    expect(frame).toContain("RED");
+    expect(frame).toContain("imx290");
+    unmount();
+  });
+
+  it("Tab moves focus and routes keys to the focused panel", async () => {
+    const { lastFrame, stdin, unmount } = render(<App />);
+    await delay(80);
+    // LTE auto-focuses on landing → 'g' reads a GPS fix.
+    stdin.write("g");
+    await delay(80);
+    expect(lastFrame()).toContain("14.50");
+    // Tab to the IMU panel → 'd' starts the live stream there.
+    await pressTab(stdin, 1);
+    stdin.write("d");
+    await delay(150);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("euler");
+    expect(frame).toContain("m/s²");
+    unmount();
+  });
+
+  it("Enter on a panel drills into the full screen, and back returns", async () => {
+    const { lastFrame, stdin, unmount } = render(<App />);
+    await delay(80);
+    // Tab from LTE → IMU → LED → Mic → Camera, then open it.
+    await pressTab(stdin, 4);
+    stdin.write("\r");
+    await delay(120);
+    expect(lastFrame()).toContain("imx290"); // CameraScreen device table
+    // 'q' from the camera list returns to the dashboard.
+    stdin.write("q");
+    await delay(60);
+    expect(lastFrame()).toContain("Dashboard");
     unmount();
   });
 
