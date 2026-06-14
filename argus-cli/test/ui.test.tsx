@@ -10,11 +10,15 @@ import { LedScreen } from "../src/screens/LedScreen.js";
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const noop = () => {};
 
-// Ink advances focus once per stdin data event, so Tab presses must be sent
-// as separate writes (a single "\t\t" chunk only moves focus once).
-async function pressTab(stdin: { write: (s: string) => void }, times = 1) {
+// Arrow keys are escape sequences; send one per data event with a tick between.
+const ARROW = { up: "[A", down: "[B" } as const;
+async function pressArrow(
+  stdin: { write: (s: string) => void },
+  dir: keyof typeof ARROW,
+  times = 1,
+) {
   for (let i = 0; i < times; i++) {
-    stdin.write("\t");
+    stdin.write(ARROW[dir]);
     await delay(20);
   }
 }
@@ -25,53 +29,75 @@ beforeAll(() => {
 });
 
 describe("UI smoke (mock mode)", () => {
-  it("renders the dashboard with all module sections by default", async () => {
+  it("renders the master-detail dashboard with all modules listed", async () => {
     const { lastFrame, unmount } = render(<App />);
-    await delay(120);
+    await delay(150);
     const frame = lastFrame() ?? "";
     expect(frame).toContain("ARGUS Test Bench");
     expect(frame).toContain("Dashboard");
-    // All five sections present at once…
-    expect(frame).toContain("SIM7600"); // LTE / GNSS
-    expect(frame).toContain("BNO085"); // IMU
-    expect(frame).toContain("RGB LED"); // LED
-    expect(frame).toContain("I2S MEMS"); // Microphone
-    expect(frame).toContain("CSI + USB"); // Cameras
-    // …populated with live fixture data.
-    expect(frame).toContain("RED");
-    expect(frame).toContain("imx290");
+    // The left list pins every module at once…
+    expect(frame).toContain("LTE / GNSS");
+    expect(frame).toContain("IMU");
+    expect(frame).toContain("RGB LED");
+    expect(frame).toContain("Microphone");
+    expect(frame).toContain("Cameras");
+    // …and the right pane previews the default selection (LTE), not the others.
+    expect(frame).toContain("Signal"); // LTE detail body
+    expect(frame).not.toContain("imx290"); // Camera detail hidden
+    expect(frame).not.toContain("BNO085"); // IMU detail hidden
     unmount();
   });
 
-  it("Tab moves focus and routes keys to the focused panel", async () => {
+  it("↓ changes which module the detail pane previews", async () => {
     const { lastFrame, stdin, unmount } = render(<App />);
-    await delay(80);
-    // LTE auto-focuses on landing → 'g' reads a GPS fix.
-    stdin.write("g");
-    await delay(80);
-    expect(lastFrame()).toContain("14.50");
-    // Tab to the IMU panel → 'd' starts the live stream there.
-    await pressTab(stdin, 1);
-    stdin.write("d");
-    await delay(150);
+    await delay(120);
+    expect(lastFrame()).not.toContain("imx290"); // LTE selected, Camera hidden
+    // LTE → IMU → LED → Mic → Camera (index 4).
+    await pressArrow(stdin, "down", 4);
+    await delay(60);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("imx290"); // Camera detail now shown
+    expect(frame).not.toContain("Signal"); // LTE detail hidden
+    unmount();
+  });
+
+  it("Enter operates the selected module (process runs in the detail pane)", async () => {
+    const { lastFrame, stdin, unmount } = render(<App />);
+    await delay(120);
+    await pressArrow(stdin, "down", 1); // select IMU
+    await delay(20);
+    stdin.write("\r"); // enter the detail to operate it
+    await delay(20);
+    stdin.write("d"); // start the live stream
+    await delay(200);
     const frame = lastFrame() ?? "";
     expect(frame).toContain("euler");
     expect(frame).toContain("m/s²");
     unmount();
   });
 
-  it("Enter on a panel drills into the full screen, and back returns", async () => {
+  it("keeps the IMU stream running after leaving and navigating away", async () => {
     const { lastFrame, stdin, unmount } = render(<App />);
-    await delay(80);
-    // Tab from LTE → IMU → LED → Mic → Camera, then open it.
-    await pressTab(stdin, 4);
-    stdin.write("\r");
     await delay(120);
-    expect(lastFrame()).toContain("imx290"); // CameraScreen device table
-    // 'q' from the camera list returns to the dashboard.
-    stdin.write("q");
+    await pressArrow(stdin, "down", 1); // select IMU
+    await delay(20);
+    stdin.write("\r"); // operate
+    await delay(20);
+    stdin.write("d"); // start the live stream
+    await delay(200);
+    expect(lastFrame()).toContain("euler");
+    // Esc returns to the list WITHOUT stopping the stream.
+    stdin.write("");
+    await delay(40);
+    expect(lastFrame()).toContain("select"); // back at the list (LIST_HINTS footer)
+    // Navigate to another module → IMU detail hidden.
+    await pressArrow(stdin, "down", 1); // select RGB LED
+    await delay(40);
+    expect(lastFrame()).not.toContain("euler");
+    // Come back → the stream is still running.
+    await pressArrow(stdin, "up", 1); // back to IMU
     await delay(60);
-    expect(lastFrame()).toContain("Dashboard");
+    expect(lastFrame()).toContain("euler");
     unmount();
   });
 

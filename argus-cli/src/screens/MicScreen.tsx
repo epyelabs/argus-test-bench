@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import SelectInput from "ink-select-input";
 import Spinner from "ink-spinner";
-import { Header } from "../components/Header.js";
-import { KeyHints } from "../components/KeyHints.js";
 import { LevelMeter } from "../components/LevelMeter.js";
 import { Table } from "../components/Table.js";
 import { join } from "node:path";
@@ -18,10 +16,20 @@ import {
   recordAudio,
   startMeter,
 } from "../hardware/mic.js";
+import { noop, type ModuleStatus, type ModuleViewProps } from "../dashboard/moduleView.js";
+import type { Hint } from "../components/KeyHints.js";
 
 type Phase = "loading" | "pick" | "menu" | "meter" | "recording" | "result";
 
-export function MicScreen({ onBack }: { onBack: () => void }) {
+export function MicScreen({
+  visible = true,
+  active = true,
+  onStatus = noop,
+  onHints = noop,
+  onExit,
+  onBack,
+}: ModuleViewProps) {
+  const exit = onExit ?? onBack ?? noop;
   const [phase, setPhase] = useState<Phase>("loading");
   const [mics, setMics] = useState<MicDevice[]>([]);
   const [mic, setMic] = useState<MicDevice | null>(null);
@@ -32,9 +40,9 @@ export function MicScreen({ onBack }: { onBack: () => void }) {
   const handleRef = useRef<StreamHandle | null>(null);
 
   useEffect(() => {
-    let active = true;
+    let alive = true;
     void listMics().then((r) => {
-      if (!active) return;
+      if (!alive) return;
       if (r.available) {
         setMics(r.data);
         setPhase("pick");
@@ -44,7 +52,7 @@ export function MicScreen({ onBack }: { onBack: () => void }) {
       }
     });
     return () => {
-      active = false;
+      alive = false;
       handleRef.current?.stop();
     };
   }, []);
@@ -55,6 +63,15 @@ export function MicScreen({ onBack }: { onBack: () => void }) {
     const timer = setInterval(() => setElapsed((Date.now() - start) / 1000), 250);
     return () => clearInterval(timer);
   }, [phase]);
+
+  const status = micStatus(phase, mics.length, !!error);
+  useEffect(() => {
+    onStatus(status);
+  }, [status.label, status.status, onStatus]);
+
+  useEffect(() => {
+    if (active) onHints(hintsFor(phase));
+  }, [active, phase, onHints]);
 
   function startMetering() {
     if (!mic) return;
@@ -70,7 +87,10 @@ export function MicScreen({ onBack }: { onBack: () => void }) {
     if (!mic) return;
     setError(null);
     setResult(null);
-    const out = join(defaultCaptureDir(), `mic-card${mic.card}-${fileStamp(new Date().toISOString())}.wav`);
+    const out = join(
+      defaultCaptureDir(),
+      `mic-card${mic.card}-${fileStamp(new Date().toISOString())}.wav`,
+    );
     const r = await recordAudio({ card: mic.card, device: mic.device, seconds, out });
     if (!r.available) {
       setError(r.reason);
@@ -88,148 +108,169 @@ export function MicScreen({ onBack }: { onBack: () => void }) {
     });
   }
 
-  useInput((input, key) => {
-    if (phase === "meter") {
-      if (input === "s" || input === "q" || key.escape) {
-        handleRef.current?.stop();
-        setPhase("menu");
+  useInput(
+    (input, key) => {
+      if (phase === "meter") {
+        // `s` stops metering; q/Esc leaves to the list but keeps it running.
+        if (input === "s") {
+          handleRef.current?.stop();
+          setPhase("menu");
+        } else if (input === "q" || key.escape) exit();
+        return;
       }
-      return;
-    }
-    if (phase === "recording") {
-      if (input === "s" || key.escape) handleRef.current?.stop();
-      return;
-    }
-    if (phase === "result") {
-      if (key.return || input === " ") {
-        setError(null);
-        setResult(null);
-        setPhase(mic ? "menu" : "pick");
-      } else if (input === "q" || key.escape) onBack();
-      return;
-    }
-    if (input === "q" || key.escape) {
-      if (phase === "menu") setPhase("pick");
-      else onBack();
-    }
-  });
+      if (phase === "recording") {
+        // `s` stops early; q/Esc leaves to the list but keeps recording.
+        if (input === "s") handleRef.current?.stop();
+        else if (input === "q" || key.escape) exit();
+        return;
+      }
+      if (phase === "result") {
+        if (key.return || input === " ") {
+          setError(null);
+          setResult(null);
+          setPhase(mic ? "menu" : "pick");
+        } else if (input === "q" || key.escape) exit();
+        return;
+      }
+      if (input === "q" || key.escape) {
+        if (phase === "menu") setPhase("pick");
+        else exit();
+      }
+    },
+    { isActive: active },
+  );
+
+  if (!visible) return null;
 
   return (
     <Box flexDirection="column">
-      <Header title="Microphone — I2S MEMS" />
-      <Box flexDirection="column" paddingX={1}>
-        {phase === "loading" ? (
-          <Text>
-            <Spinner type="dots" /> Listing capture devices (arecord -l)…
-          </Text>
-        ) : null}
+      {phase === "loading" ? (
+        <Text>
+          <Spinner type="dots" /> Listing capture devices (arecord -l)…
+        </Text>
+      ) : null}
 
-        {phase === "pick" ? (
-          mics.length === 0 ? (
-            <Box flexDirection="column">
-              <Text color="yellow">No ALSA capture devices found.</Text>
-              <Text color="gray">Check the I2S dtoverlay for the SPH0645.</Text>
-            </Box>
-          ) : (
-            <Box flexDirection="column">
-              <Table
-                columns={[
-                  { header: "Card", cell: (d) => `${d.card}:${d.device}` },
-                  { header: "Id", cell: (d) => d.cardId },
-                  { header: "Name", cell: (d) => d.cardName },
-                  { header: "Mic?", cell: (d) => (d.isMic ? "✓" : "") },
-                ]}
-                rows={mics}
-              />
-              <Box marginTop={1}>
-                <SelectInput
-                  items={mics.map((d) => ({
-                    label: `card ${d.card},${d.device} — ${d.cardName}${d.isMic ? "  (I2S mic)" : ""}`,
-                    value: `${d.card}:${d.device}`,
-                  }))}
-                  initialIndex={Math.max(0, mics.findIndex((d) => d.isMic))}
-                  onSelect={(item) => {
-                    const [c, dv] = String(item.value).split(":").map(Number);
-                    setMic(mics.find((d) => d.card === c && d.device === dv) ?? null);
-                    setPhase("menu");
-                  }}
-                />
-              </Box>
-            </Box>
-          )
-        ) : null}
-
-        {phase === "menu" && mic ? (
+      {phase === "pick" ? (
+        mics.length === 0 ? (
           <Box flexDirection="column">
-            <Text>
-              Selected <Text color="cyan">{mic.cardName}</Text> (card {mic.card},{mic.device})
-            </Text>
+            <Text color="yellow">No ALSA capture devices found.</Text>
+            <Text color="gray">Check the I2S dtoverlay for the SPH0645.</Text>
+          </Box>
+        ) : (
+          <Box flexDirection="column">
+            <Table
+              columns={[
+                { header: "Card", cell: (d) => `${d.card}:${d.device}` },
+                { header: "Id", cell: (d) => d.cardId },
+                { header: "Name", cell: (d) => d.cardName },
+                { header: "Mic?", cell: (d) => (d.isMic ? "✓" : "") },
+              ]}
+              rows={mics}
+            />
             <Box marginTop={1}>
               <SelectInput
-                items={[
-                  { label: "📊  Live level meter", value: "meter" },
-                  { label: "⏺   Record 5s to WAV", value: "rec5" },
-                  { label: "⏺   Record 10s to WAV", value: "rec10" },
-                  { label: "←  Back to device list", value: "back" },
-                ]}
+                isFocused={active}
+                items={mics.map((d) => ({
+                  label: `card ${d.card},${d.device} — ${d.cardName}${d.isMic ? "  (I2S mic)" : ""}`,
+                  value: `${d.card}:${d.device}`,
+                }))}
+                initialIndex={Math.max(0, mics.findIndex((d) => d.isMic))}
                 onSelect={(item) => {
-                  if (item.value === "meter") startMetering();
-                  else if (item.value === "rec5") void startRecording(5);
-                  else if (item.value === "rec10") void startRecording(10);
-                  else setPhase("pick");
+                  const [c, dv] = String(item.value).split(":").map(Number);
+                  setMic(mics.find((d) => d.card === c && d.device === dv) ?? null);
+                  setPhase("menu");
                 }}
               />
             </Box>
           </Box>
-        ) : null}
+        )
+      ) : null}
 
-        {phase === "meter" ? (
-          <Box flexDirection="column">
-            <Text color="cyan">
-              Live input level — make some noise{" "}
-              <Text color="gray">(gain ×{micGain()}, set ARGUS_MIC_GAIN to tune)</Text>
-            </Text>
-            <Box marginTop={1} flexDirection="column">
-              <LevelMeter level={level.rms} peak={level.peak} label="RMS " width={44} />
-            </Box>
+      {phase === "menu" && mic ? (
+        <Box flexDirection="column">
+          <Text>
+            Selected <Text color="cyan">{mic.cardName}</Text> (card {mic.card},{mic.device})
+          </Text>
+          <Box marginTop={1}>
+            <SelectInput
+              isFocused={active}
+              items={[
+                { label: "📊  Live level meter", value: "meter" },
+                { label: "⏺   Record 5s to WAV", value: "rec5" },
+                { label: "⏺   Record 10s to WAV", value: "rec10" },
+                { label: "←  Back to device list", value: "back" },
+              ]}
+              onSelect={(item) => {
+                if (item.value === "meter") startMetering();
+                else if (item.value === "rec5") void startRecording(5);
+                else if (item.value === "rec10") void startRecording(10);
+                else setPhase("pick");
+              }}
+            />
           </Box>
-        ) : null}
+        </Box>
+      ) : null}
 
-        {phase === "recording" ? (
-          <Box flexDirection="column">
-            <Text color="red">● REC</Text>
-            <Text>{formatDuration(elapsed)} elapsed</Text>
+      {phase === "meter" ? (
+        <Box flexDirection="column">
+          <Text color="cyan">
+            Live input level — make some noise{" "}
+            <Text color="gray">(gain ×{micGain()}, set ARGUS_MIC_GAIN to tune)</Text>
+          </Text>
+          <Box marginTop={1} flexDirection="column">
+            <LevelMeter level={level.rms} peak={level.peak} label="RMS " width={44} />
           </Box>
-        ) : null}
+        </Box>
+      ) : null}
 
-        {phase === "result" ? (
-          <Box flexDirection="column">
-            {result ? <Text color="green">✓ {result}</Text> : null}
-            {error ? <Text color="red">⚠ {error}</Text> : null}
-          </Box>
-        ) : null}
-      </Box>
-      <KeyHints hints={hintsFor(phase)} />
+      {phase === "recording" ? (
+        <Box flexDirection="column">
+          <Text color="red">● REC</Text>
+          <Text>{formatDuration(elapsed)} elapsed</Text>
+        </Box>
+      ) : null}
+
+      {phase === "result" ? (
+        <Box flexDirection="column">
+          {result ? <Text color="green">✓ {result}</Text> : null}
+          {error ? <Text color="red">⚠ {error}</Text> : null}
+        </Box>
+      ) : null}
     </Box>
   );
 }
 
-function hintsFor(phase: Phase) {
+function micStatus(phase: Phase, deviceCount: number, hasError: boolean): ModuleStatus {
+  if (phase === "loading") return { label: "listing", status: "busy" };
+  if (phase === "meter") return { label: "metering", status: "ok" };
+  if (phase === "recording") return { label: "REC", status: "error" };
+  if (hasError) return { label: "error", status: "error" };
+  if (deviceCount === 0) return { label: "no devices", status: "warn" };
+  return { label: `${deviceCount} device${deviceCount === 1 ? "" : "s"}`, status: "ok" };
+}
+
+function hintsFor(phase: Phase): Hint[] {
   switch (phase) {
     case "meter":
-      return [{ keys: "s", label: "stop" }];
+      return [
+        { keys: "s", label: "stop" },
+        { keys: "q/Esc", label: "back (keep running)" },
+      ];
     case "recording":
-      return [{ keys: "s", label: "stop early" }];
+      return [
+        { keys: "s", label: "stop early" },
+        { keys: "q/Esc", label: "back (keep running)" },
+      ];
     case "result":
       return [
         { keys: "↵", label: "continue" },
-        { keys: "q", label: "back" },
+        { keys: "q/Esc", label: "back" },
       ];
     default:
       return [
         { keys: "↑↓", label: "move" },
         { keys: "↵", label: "select" },
-        { keys: "q", label: "back" },
+        { keys: "q/Esc", label: "back" },
       ];
   }
 }

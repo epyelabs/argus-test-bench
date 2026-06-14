@@ -1,77 +1,128 @@
-import { useState } from "react";
-import { Box } from "ink";
+import { useCallback, useMemo, useState } from "react";
+import { Box, useApp, useInput } from "ink";
 import { Header } from "../components/Header.js";
 import { KeyHints, type Hint } from "../components/KeyHints.js";
+import { StatusBadge } from "../components/StatusBadge.js";
+import { PanelFrame } from "../dashboard/PanelFrame.js";
 import { useTerminalSize } from "../lib/useTerminalSize.js";
-import { LtePanel } from "../dashboard/panels/LtePanel.js";
-import { ImuPanel } from "../dashboard/panels/ImuPanel.js";
-import { LedPanel } from "../dashboard/panels/LedPanel.js";
-import { MicPanel } from "../dashboard/panels/MicPanel.js";
-import { CameraPanel } from "../dashboard/panels/CameraPanel.js";
-import type { Screen } from "../app.js";
+import type { ModuleStatus } from "../dashboard/moduleView.js";
+import { LteScreen } from "./LteScreen.js";
+import { ImuScreen } from "./ImuScreen.js";
+import { LedScreen } from "./LedScreen.js";
+import { MicScreen } from "./MicScreen.js";
+import { CameraScreen } from "./CameraScreen.js";
 
-/** Min terminal width (cols) at which we switch from a stack to a 2-column grid. */
-const WIDE_THRESHOLD = 100;
+/** Module list — order = list order = the index the dashboard navigates. */
+const MODULES = [
+  { id: "lte", title: "LTE / GNSS", View: LteScreen },
+  { id: "imu", title: "IMU", View: ImuScreen },
+  { id: "led", title: "RGB LED", View: LedScreen },
+  { id: "mic", title: "Microphone", View: MicScreen },
+  { id: "camera", title: "Cameras", View: CameraScreen },
+] as const;
+
+/** Fixed left-list width; below this terminal width we stack list over detail. */
+const LIST_WIDTH = 26;
+const NARROW_THRESHOLD = 80;
+
+const LIST_HINTS: Hint[] = [
+  { keys: "↑↓", label: "select" },
+  { keys: "↵/→", label: "open" },
+  { keys: "q", label: "quit" },
+];
 
 /**
- * All-modules dashboard. Every hardware module is a focusable section; Tab moves
- * focus and keys act on the focused section only (Ink's built-in focus system).
+ * Master-detail dashboard. The left list pins all modules (with live status);
+ * the right pane shows the selected module's full view. All module views stay
+ * mounted so their streams/polls keep running while you switch.
+ *
+ *  - list focus (operating=false): ↑/↓ previews modules, ↵/→ enters the detail.
+ *  - detail focus (operating=true): keys act on the module; its back key exits.
  */
-export function DashboardScreen({ onOpen }: { onOpen: (s: Screen) => void }) {
+export function DashboardScreen() {
+  const { exit } = useApp();
   const { columns } = useTerminalSize();
-  const [focusedHints, setFocusedHints] = useState<Hint[]>([]);
+  const twoCol = columns >= NARROW_THRESHOLD;
 
-  const common = { onOpen, onHints: setFocusedHints };
-  // Order = Tab order. LTE auto-focuses on landing.
-  const panels = [
-    <LtePanel key="lte" focusId="lte" autoFocus {...common} />,
-    <ImuPanel key="imu" focusId="imu" {...common} />,
-    <LedPanel key="led" focusId="led" {...common} />,
-    <MicPanel key="mic" focusId="mic" {...common} />,
-    <CameraPanel key="camera" focusId="camera" {...common} />,
-  ];
+  const [selected, setSelected] = useState(0);
+  const [operating, setOperating] = useState(false);
+  const [statuses, setStatuses] = useState<Record<string, ModuleStatus>>({});
+  const [moduleHints, setModuleHints] = useState<Hint[]>([]);
+
+  const reportStatus = useCallback((id: string, s: ModuleStatus) => {
+    setStatuses((prev) =>
+      prev[id]?.label === s.label && prev[id]?.status === s.status ? prev : { ...prev, [id]: s },
+    );
+  }, []);
+  // Stable per-module onStatus handlers so child effects don't re-fire each render.
+  const statusHandlers = useMemo(
+    () =>
+      Object.fromEntries(
+        MODULES.map((m) => [m.id, (s: ModuleStatus) => reportStatus(m.id, s)]),
+      ) as Record<string, (s: ModuleStatus) => void>,
+    [reportStatus],
+  );
+  const stopOperating = useCallback(() => setOperating(false), []);
+
+  useInput(
+    (input, key) => {
+      if (key.upArrow || input === "k") {
+        setSelected((i) => (i - 1 + MODULES.length) % MODULES.length);
+      } else if (key.downArrow || input === "j") {
+        setSelected((i) => (i + 1) % MODULES.length);
+      } else if (key.return || key.rightArrow) {
+        setOperating(true);
+      } else if (input === "q" || input === "Q") {
+        exit();
+      }
+    },
+    { isActive: !operating },
+  );
+
+  const list = (
+    <Box flexDirection="column" width={twoCol ? LIST_WIDTH : undefined}>
+      {MODULES.map((m, i) => {
+        const st = statuses[m.id];
+        return (
+          <PanelFrame key={m.id} title={m.title} isFocused={i === selected}>
+            <StatusBadge status={st?.status ?? "unknown"}>{st?.label ?? "…"}</StatusBadge>
+          </PanelFrame>
+        );
+      })}
+    </Box>
+  );
+
+  const detail = (
+    <Box
+      flexGrow={1}
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={operating ? "cyan" : "gray"}
+      paddingX={1}
+      marginLeft={twoCol ? 1 : 0}
+      marginTop={twoCol ? 0 : 1}
+    >
+      {MODULES.map((m, i) => (
+        <m.View
+          key={m.id}
+          visible={i === selected}
+          active={i === selected && operating}
+          onStatus={statusHandlers[m.id]}
+          onHints={setModuleHints}
+          onExit={stopOperating}
+        />
+      ))}
+    </Box>
+  );
 
   return (
     <Box flexDirection="column">
       <Header title="Dashboard" />
-      {columns >= WIDE_THRESHOLD ? (
-        <TwoColumnGrid panels={panels} />
-      ) : (
-        <Box flexDirection="column" gap={1}>
-          {panels}
-        </Box>
-      )}
-      <KeyHints
-        hints={[
-          ...focusedHints,
-          { keys: "Tab", label: "switch" },
-          { keys: "q", label: "quit" },
-        ]}
-      />
-    </Box>
-  );
-}
-
-/**
- * Two panels per row, row-major. Keeping it row-major means the Tab focus order
- * (which follows render order) matches the natural left-to-right, top-to-bottom
- * reading order — and stays identical to the single-column stack order.
- */
-function TwoColumnGrid({ panels }: { panels: React.ReactNode[] }) {
-  const rows: React.ReactNode[][] = [];
-  for (let i = 0; i < panels.length; i += 2) rows.push(panels.slice(i, i + 2));
-  return (
-    <Box flexDirection="column" gap={1}>
-      {rows.map((row, i) => (
-        <Box key={i} flexDirection="row" gap={2}>
-          <Box flexDirection="column" width="50%">
-            {row[0]}
-          </Box>
-          <Box flexDirection="column" width="50%">
-            {row[1] ?? null}
-          </Box>
-        </Box>
-      ))}
+      <Box flexDirection={twoCol ? "row" : "column"}>
+        {list}
+        {detail}
+      </Box>
+      <KeyHints hints={operating ? moduleHints : LIST_HINTS} />
     </Box>
   );
 }
