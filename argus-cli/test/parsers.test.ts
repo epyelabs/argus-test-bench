@@ -16,7 +16,7 @@ import {
   s32StereoToMonoS16,
   encodeWavPcm16,
 } from "../src/hardware/mic.js";
-import { parsePinctrlLevel } from "../src/hardware/led.js";
+import { parsePinctrlLevel } from "../src/hardware/gpio.js";
 import { decodeBoardId } from "../src/hardware/boardId.js";
 import { BOARD_ID, IMU, LTE, MIC } from "../src/config/hardware.js";
 import {

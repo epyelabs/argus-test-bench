@@ -9,10 +9,9 @@
  * is the read-only counterpart to the LED HAL.
  */
 import { BOARD_ID } from "../config/hardware.js";
-import { commandExists, run } from "../lib/exec.js";
 import { isMock } from "../lib/platform.js";
-import { parsePinctrlLevel } from "./led.js";
-import { ok, unavailable, type HalResult } from "./types.js";
+import { getGpio } from "./gpio.js";
+import { ok, type HalResult } from "./types.js";
 
 export interface BoardIdInfo {
   /** Per-pin level, in BOARD_ID.gpios order (index 0 = Board_ID_0 = GPIO26). */
@@ -33,13 +32,6 @@ export function decodeBoardId(bits: boolean[]): { code: string; partNumber: stri
   return { code, partNumber: BOARD_ID.known[code] ?? null };
 }
 
-async function ensurePinctrl(): Promise<string | null> {
-  if (!(await commandExists("pinctrl"))) {
-    return "pinctrl not found — install raspi-utils (Raspberry Pi OS).";
-  }
-  return null;
-}
-
 export async function readBoardId(): Promise<HalResult<BoardIdInfo>> {
   if (isMock()) {
     // No straps to read off-hardware; report the known v1.0 board (all-low).
@@ -47,16 +39,11 @@ export async function readBoardId(): Promise<HalResult<BoardIdInfo>> {
     return ok({ bits, ...decodeBoardId(bits) });
   }
 
-  const missing = await ensurePinctrl();
-  if (missing) return unavailable(missing);
-
   const bits: boolean[] = [];
   for (const gpio of BOARD_ID.gpios) {
-    const res = await run("pinctrl", ["get", String(gpio)]);
-    if (res.failed) return unavailable(res.stderr.trim() || "pinctrl get failed");
-    const level = parsePinctrlLevel(res.stdout);
-    if (level === null) return unavailable(`could not parse: ${res.stdout.trim()}`);
-    bits.push(level);
+    const r = await getGpio(gpio);
+    if (!r.available) return r;
+    bits.push(r.data.high);
   }
   return ok({ bits, ...decodeBoardId(bits) });
 }

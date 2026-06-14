@@ -13,6 +13,7 @@ import { LTE } from "../config/hardware.js";
 import { run } from "../lib/exec.js";
 import { isMock } from "../lib/platform.js";
 import { aggregateFix, type GpsFix } from "../lib/nmea.js";
+import { getGpio, setGpio } from "./gpio.js";
 import { ok, unavailable, type HalResult } from "./types.js";
 import { LSUSB, NMEA_LINES, TELEMETRY_JSON } from "../mocks/fixtures.js";
 
@@ -36,6 +37,46 @@ export interface Telemetry {
 export interface GpsResult {
   fix: GpsFix;
   sentenceCount: number;
+}
+
+/** Live state of one M.2 WWAN control/status strap (see LTE.controlPins). */
+export interface LtePinState {
+  key: string;
+  signal: string;
+  gpio: number;
+  dir: "out" | "in";
+  high: boolean;
+  /** Documented meaning of the current level, e.g. "WWAN ON". */
+  meaning: string;
+}
+
+/**
+ * Read every M.2 control/status strap. In mock mode each pin reports its
+ * hardware default until it is toggled (the `def` seeds getGpio's fallback).
+ */
+export async function readLteControls(): Promise<HalResult<LtePinState[]>> {
+  const states: LtePinState[] = [];
+  for (const p of LTE.controlPins) {
+    const r = await getGpio(p.gpio, p.def === 1);
+    if (!r.available) return r;
+    states.push({
+      key: p.key,
+      signal: p.signal,
+      gpio: p.gpio,
+      dir: p.dir,
+      high: r.data.high,
+      meaning: r.data.high ? p.levels[1] : p.levels[0],
+    });
+  }
+  return ok(states);
+}
+
+/** Drive an output control pin high/low (only `dir: "out"` pins should be set). */
+export async function setLteControl(
+  gpio: number,
+  high: boolean,
+): Promise<HalResult<{ high: boolean }>> {
+  return setGpio(gpio, high);
 }
 
 /** Pure: find the modem line in `lsusb` output by vendor/product id. */

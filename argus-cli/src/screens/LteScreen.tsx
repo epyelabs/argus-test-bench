@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import { StatusBadge, type Status } from "../components/StatusBadge.js";
+import { LTE } from "../config/hardware.js";
 import { csqQuality } from "../lib/format.js";
 import { hasPosition } from "../lib/nmea.js";
 import {
   detectModem,
   readGps,
+  readLteControls,
   readTelemetry,
+  setLteControl,
   type GpsResult,
+  type LtePinState,
   type ModemInfo,
   type Telemetry,
 } from "../hardware/lte.js";
@@ -22,7 +26,11 @@ const STATUS_MAP: Record<string, Status> = {
   dead_zone: "error",
 };
 
+/** The togglable output straps, in order — keys 1..N map to these. */
+const OUT_PINS = LTE.controlPins.filter((p) => p.dir === "out");
+
 const HINTS = [
+  { keys: "1-4", label: "toggle pin" },
   { keys: "g", label: "read GPS" },
   { keys: "q/Esc", label: "back" },
 ];
@@ -40,10 +48,12 @@ export function LteScreen({
   const [telem, setTelem] = useState<HalResult<Telemetry> | null>(null);
   const [gps, setGps] = useState<HalResult<GpsResult> | null>(null);
   const [gpsBusy, setGpsBusy] = useState(false);
+  const [controls, setControls] = useState<HalResult<LtePinState[]> | null>(null);
 
   useEffect(() => {
     let alive = true;
     void detectModem().then((r) => alive && setModem(r));
+    void readLteControls().then((r) => alive && setControls(r));
     const poll = async () => {
       const r = await readTelemetry();
       if (alive) setTelem(r);
@@ -55,6 +65,10 @@ export function LteScreen({
       clearInterval(timer);
     };
   }, []);
+
+  /** Current level of a control pin from the last read (falls back to its default). */
+  const pinHigh = (gpio: number, def: number): boolean =>
+    controls?.available ? (controls.data.find((s) => s.gpio === gpio)?.high ?? def === 1) : def === 1;
 
   let statusLabel = "detecting";
   let statusKind: Status = "busy";
@@ -92,6 +106,18 @@ export function LteScreen({
           setGps(r);
           setGpsBusy(false);
         });
+        return;
+      }
+      // 1..N toggle the togglable output straps. Guard on an actual digit:
+      // arrow/other keys arrive as input "" and "123…".indexOf("") is 0.
+      if (input.length === 1 && input >= "1" && input <= "9") {
+        const idx = Number(input) - 1;
+        if (idx < OUT_PINS.length) {
+          const pin = OUT_PINS[idx];
+          void setLteControl(pin.gpio, !pinHigh(pin.gpio, pin.def)).then(() =>
+            readLteControls().then(setControls),
+          );
+        }
       }
     },
     { isActive: active },
@@ -187,6 +213,36 @@ export function LteScreen({
               {gps.data.sentenceCount} sentences · waiting for satellite lock.
             </Text>
           </Box>
+        )}
+      </Box>
+
+      {/* M.2 WWAN control / status straps */}
+      <Box flexDirection="column">
+        <Text bold color="cyan">
+          M.2 control pins <Text color="gray">(pinctrl · 1-{OUT_PINS.length} toggle outputs)</Text>
+        </Text>
+        {!controls ? (
+          <Text>
+            <Spinner type="dots" /> Reading pin states…
+          </Text>
+        ) : !controls.available ? (
+          <Text color="yellow">○ {controls.reason}</Text>
+        ) : (
+          controls.data.map((s) => {
+            const num = s.dir === "out" ? OUT_PINS.findIndex((p) => p.gpio === s.gpio) + 1 : 0;
+            return (
+              <StatusBadge key={s.gpio} status={s.high ? "ok" : "unknown"}>
+                <Text color="gray">{num ? `${num} ` : "  "}</Text>
+                <Text bold>{s.signal.padEnd(22)}</Text>
+                <Text color="gray">GPIO{String(s.gpio).padEnd(3)} </Text>
+                <Text>= {s.high ? "1" : "0"} </Text>
+                <Text color="gray">
+                  {s.meaning}
+                  {s.dir === "in" ? " (read-only)" : ""}
+                </Text>
+              </StatusBadge>
+            );
+          })
         )}
       </Box>
     </Box>

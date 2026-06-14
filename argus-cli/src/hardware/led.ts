@@ -1,78 +1,34 @@
 /**
- * RGB LED control via `pinctrl` (raspi-utils).
+ * RGB LED control — a thin, color-keyed wrapper over the generic GPIO HAL.
  *
- * On the CM5 / RP1, legacy sysfs GPIO and RPi.GPIO do not work — `pinctrl`
- * is the supported userspace tool. `pinctrl set <n> op dh` drives the pin
- * high and the state PERSISTS after the command exits, which is exactly what
- * a set-and-forget LED toggle needs. The LED is active-HIGH per the board
- * guide (1 = ON).
+ * The LED is active-HIGH per the board guide (1 = ON), and `pinctrl` drives
+ * persist after the command exits, which is exactly what a set-and-forget LED
+ * toggle needs. The actual pinctrl plumbing lives in `gpio.ts`.
  */
 import { RGB_LED, type LedColor } from "../config/hardware.js";
-import { commandExists, run } from "../lib/exec.js";
-import { isMock } from "../lib/platform.js";
-import { ok, unavailable, type HalResult } from "./types.js";
+import { getGpio, setGpio } from "./gpio.js";
+import { ok, type HalResult } from "./types.js";
+
+// Re-exported so existing importers (boardId, tests) keep their led.js import.
+export { parsePinctrlLevel } from "./gpio.js";
 
 export const LED_COLORS = Object.keys(RGB_LED) as LedColor[];
 
-/** In-memory state used only in mock mode (no hardware to read back). */
-const mockState: Record<LedColor, boolean> = { red: false, green: false, blue: false };
-
-async function ensurePinctrl(): Promise<string | null> {
-  if (!(await commandExists("pinctrl"))) {
-    return "pinctrl not found — install raspi-utils (Raspberry Pi OS).";
-  }
-  return null;
-}
-
 export async function setLed(color: LedColor, on: boolean): Promise<HalResult<{ on: boolean }>> {
-  const gpio = RGB_LED[color].gpio;
-  if (isMock()) {
-    mockState[color] = on;
-    return ok({ on });
-  }
-  const missing = await ensurePinctrl();
-  if (missing) return unavailable(missing);
-
-  // op = output mode, dh = drive high (ON), dl = drive low (OFF).
-  const res = await run("pinctrl", ["set", String(gpio), "op", on ? "dh" : "dl"]);
-  if (res.failed) return unavailable(res.stderr.trim() || "pinctrl set failed");
-  return ok({ on });
-}
-
-/**
- * Parse the level token from a `pinctrl get` line, e.g. "...| hi //".
- *
- * A freshly booted pin that has never been driven reports function `no`
- * (none) with no level ("12: no    pd | -- // GPIO12 = none"). That is not a
- * parse failure: an active-HIGH LED that isn't driven is simply OFF, so we
- * report it as low. Once toggled, the pin becomes an output and reads hi/lo.
- */
-export function parsePinctrlLevel(line: string): boolean | null {
-  const m = line.match(/\|\s*(hi|lo)\b/i) ?? line.match(/\b(hi|lo)\b/i);
-  if (m) return m[1].toLowerCase() === "hi";
-  if (/\|\s*--/.test(line)) return false;
-  return null;
+  const r = await setGpio(RGB_LED[color].gpio, on);
+  return r.available ? ok({ on: r.data.high }) : r;
 }
 
 export async function getLed(color: LedColor): Promise<HalResult<{ on: boolean }>> {
-  const gpio = RGB_LED[color].gpio;
-  if (isMock()) return ok({ on: mockState[color] });
-
-  const missing = await ensurePinctrl();
-  if (missing) return unavailable(missing);
-
-  const res = await run("pinctrl", ["get", String(gpio)]);
-  if (res.failed) return unavailable(res.stderr.trim() || "pinctrl get failed");
-  const level = parsePinctrlLevel(res.stdout);
-  if (level === null) return unavailable(`could not parse: ${res.stdout.trim()}`);
-  return ok({ on: level });
+  const r = await getGpio(RGB_LED[color].gpio);
+  return r.available ? ok({ on: r.data.high }) : r;
 }
 
 export async function getAllLeds(): Promise<HalResult<Record<LedColor, boolean>>> {
   const result = {} as Record<LedColor, boolean>;
   for (const color of LED_COLORS) {
     const r = await getLed(color);
-    if (!r.available) return unavailable(r.reason);
+    if (!r.available) return r;
     result[color] = r.data.on;
   }
   return ok(result);
@@ -81,7 +37,7 @@ export async function getAllLeds(): Promise<HalResult<Record<LedColor, boolean>>
 export async function setAllLeds(on: boolean): Promise<HalResult<void>> {
   for (const color of LED_COLORS) {
     const r = await setLed(color, on);
-    if (!r.available) return unavailable(r.reason);
+    if (!r.available) return r;
   }
   return ok(undefined);
 }

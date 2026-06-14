@@ -135,6 +135,42 @@ describe("UI smoke (mock mode)", () => {
     unmount();
   });
 
+  it("LTE screen lists the M.2 control pins at their hardware defaults", async () => {
+    const { lastFrame, unmount } = render(<LteScreen onBack={noop} />);
+    await delay(60);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("FULL_CARD_POWER_OFF#");
+    expect(frame).toContain("GNSS_DISABLE");
+    expect(frame).toContain("WWAN_DISABLE");
+    expect(frame).toContain("NGFF_RESET#");
+    expect(frame).toContain("WAKE_ON_WAN#");
+    expect(frame).toContain("WWAN ON"); // power default = 1
+    expect(frame).toContain("GNSS active"); // gnss default = 1
+    expect(frame).toContain("(read-only)"); // the wake input row
+    unmount();
+  });
+
+  it("LTE screen does not toggle pins on arrow keys", async () => {
+    const { lastFrame, stdin, unmount } = render(<LteScreen onBack={noop} />);
+    await delay(60);
+    expect(lastFrame()).toContain("WWAN ON"); // GPIO5 default high
+    stdin.write("[C"); // right arrow
+    stdin.write("[D"); // left arrow
+    await delay(60);
+    expect(lastFrame()).toContain("WWAN ON"); // still high — arrows are ignored
+    unmount();
+  });
+
+  it("LTE screen toggles an output pin with a number key", async () => {
+    const { lastFrame, stdin, unmount } = render(<LteScreen onBack={noop} />);
+    await delay(60);
+    expect(lastFrame()).toContain("WWAN ON"); // GPIO5 starts high (1)
+    stdin.write("1"); // toggle FULL_CARD_POWER_OFF# low
+    await delay(60);
+    expect(lastFrame()).toContain("WWAN OFF");
+    unmount();
+  });
+
   it("IMU screen detects the BNO085", async () => {
     const { lastFrame, unmount } = render(<ImuScreen onBack={noop} />);
     await delay(60);
