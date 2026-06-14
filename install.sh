@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOT_CONFIG="/boot/firmware/config.txt"
 
 # Ordered list of steps run when no argument is given.
-STEPS=(step1 step2 step3)
+STEPS=(step1 step2 step3 step4 step5)
 
 # STEP 1: Install Nodejs (using nvm)
 step1() {
@@ -68,9 +68,52 @@ step3() {
   echo "[install] Camera config done — reboot required for the overlays to take effect."
 }
 
-# LTE: just run `argus-test-bench/argus-connection-manager/install.sh`?
-# IMU: setup python and download necessary libs like adafruit_bno08x
-# MIC: update boot/config.txt
+# STEP 4 - IMU: i2c-tools + Python (adafruit_bno08x). See argus-cli/src/hardware/imu.ts.
+step4() {
+  echo "[install] Installing IMU tooling (i2c-tools, python3-pip)..."
+  sudo apt update
+  sudo apt install -y i2c-tools python3-pip
+
+  echo "[install] Installing Adafruit Python libs (system-wide)..."
+  # Bookworm enforces PEP 668; --break-system-packages installs into system site-packages
+  # so the bare `python3` the CLI spawns can import them.
+  sudo python3 -m pip install --break-system-packages \
+    adafruit-circuitpython-bno08x adafruit-blinka
+
+  echo "[install] Enabling I2C bus 1 in $BOOT_CONFIG..."
+  if sudo grep -qxF "dtparam=i2c_arm=on" "$BOOT_CONFIG"; then
+    echo "[install] I2C already enabled, skipping."
+  elif sudo grep -qE '^\s*#?\s*dtparam=i2c_arm=' "$BOOT_CONFIG"; then
+    # Default Bookworm config.txt ships this line commented — normalize it to on.
+    sudo sed -i -E 's/^\s*#?\s*dtparam=i2c_arm=.*/dtparam=i2c_arm=on/' "$BOOT_CONFIG"
+  else
+    echo "dtparam=i2c_arm=on" | sudo tee -a "$BOOT_CONFIG" >/dev/null
+  fi
+
+  echo "[install] IMU setup done — reboot required for I2C to come up. Verify with: i2cdetect -y 1"
+}
+
+# STEP 5 - MIC: enable the googlevoicehat I2S soundcard overlay in config.txt.
+step5() {
+  echo "[install] Configuring I2S microphone in $BOOT_CONFIG..."
+
+  # Disable the default onboard audio so the I2S overlay owns the bus (idempotent:
+  # once commented, the '#' prevents the uncommented pattern from matching again).
+  if sudo grep -qE '^\s*dtparam=audio=on' "$BOOT_CONFIG"; then
+    sudo sed -i -E 's/^(\s*)dtparam=audio=on/\1#dtparam=audio=on/' "$BOOT_CONFIG"
+  fi
+
+  # Add the googlevoicehat soundcard overlay (matches mic.ts card hint "googlevoicehat").
+  if sudo grep -qxF "dtoverlay=googlevoicehat-soundcard" "$BOOT_CONFIG"; then
+    echo "[install] mic overlay already present, skipping."
+  else
+    echo "dtoverlay=googlevoicehat-soundcard" | sudo tee -a "$BOOT_CONFIG" >/dev/null
+  fi
+
+  echo "[install] Mic config done — reboot required. Verify with: arecord -l"
+}
+
+# STEP 6 - LTE: just run `argus-test-bench/argus-connection-manager/install.sh`?
 
 usage() {
   echo "Usage: $(basename "$0") [step]"
