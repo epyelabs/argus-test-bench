@@ -26,9 +26,40 @@ export const RPICAM_LIST = `Available cameras
 export const RPICAM_LIST_EMPTY = `No cameras available!
 `;
 
-/** `lsusb` line for the SIM7600 modem (plus noise). */
+/** `v4l2-ctl --list-devices` — the UVC camera (ELP SC2210). Tabs precede nodes. */
+export const V4L2_LIST_DEVICES = `HD USB Camera: HD USB Camera (usb-xhci-hcd.1-1.1):
+\t/dev/video8
+\t/dev/video9
+\t/dev/media5
+`;
+
+/** `v4l2-ctl -d /dev/video8 --list-formats-ext` — the capture node (MJPG + YUYV). */
+export const V4L2_FORMATS = `ioctl: VIDIOC_ENUM_FMT
+\tType: Video Capture
+
+\t[0]: 'MJPG' (Motion-JPEG, compressed)
+\t\tSize: Discrete 1920x1080
+\t\t\tInterval: Discrete 0.017s (60.000 fps)
+\t\t\tInterval: Discrete 0.033s (30.000 fps)
+\t\tSize: Discrete 1280x720
+\t\t\tInterval: Discrete 0.017s (60.000 fps)
+\t[1]: 'YUYV' (YUYV 4:2:2)
+\t\tSize: Discrete 1920x1080
+\t\t\tInterval: Discrete 0.200s (5.000 fps)
+\t\tSize: Discrete 1280x720
+\t\t\tInterval: Discrete 0.100s (10.000 fps)
+`;
+
+/** `v4l2-ctl -d /dev/video9 --list-formats-ext` — the metadata node (no capture sizes). */
+export const V4L2_FORMATS_META = `ioctl: VIDIOC_ENUM_FMT
+\tType: Metadata Capture
+
+\t[0]: 'UVCH' (UVC Payload Header Metadata)
+`;
+
+/** `lsusb` line for the SIM7600 modem + the UVC webcam (plus noise). */
 export const LSUSB = `Bus 003 Device 002: ID 1e0e:9011 Qualcomm / Option SimTech, Incorporated
-Bus 001 Device 003: ID 046d:0825 Logitech, Inc. Webcam C270
+Bus 004 Device 003: ID 32e4:2210 USB Cam Manufacturer HD USB Camera
 Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
 `;
 

@@ -25,15 +25,16 @@ describe("UI smoke (mock mode)", () => {
     unmount();
   });
 
-  it("camera screen lists the mock CSI cameras with detail", async () => {
+  it("camera screen lists both CSI and UVC sources", async () => {
     const { lastFrame, unmount } = render(<CameraScreen onBack={noop} />);
-    await delay(60);
+    await delay(80);
     const frame = lastFrame() ?? "";
-    expect(frame).toContain("imx290");
-    expect(frame).toContain("12-bit");
-    expect(frame).toContain("RGGB");
-    expect(frame).toContain("i2c@88000"); // the two ports are distinguishable
+    expect(frame).toContain("imx290"); // CSI
+    expect(frame).toContain("i2c@88000"); // CSI ports distinguishable
     expect(frame).toContain("i2c@70000");
+    expect(frame).toContain("HD USB Camera"); // UVC
+    expect(frame).toContain("/dev/video8"); // UVC capture node
+    expect(frame).toMatch(/UVC/); // Type column
     unmount();
   });
 

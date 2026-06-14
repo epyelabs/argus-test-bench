@@ -30,14 +30,18 @@ Navigation: `↑↓` move, `↵` select, `q`/`Esc` go back, `q` on the home menu
 
 | Module | Detect | Actions | Underlying tool |
 |--------|--------|---------|-----------------|
-| **Cameras** (CSI) | `rpicam-hello --list-cameras` | snapshot, record (res/fps/duration) | `rpicam-still`, `rpicam-vid` |
+| **Cameras** (CSI + USB) | `rpicam-hello --list-cameras` + `v4l2-ctl --list-devices` | snapshot, record (res/fps/duration) | CSI: `rpicam-still`/`rpicam-vid` · UVC: `ffmpeg` |
 | **LTE / GNSS** | `lsusb` (SimCom `1e0e:9011`) + `/dev/ttyUSB*` | live signal, GPS fix | telemetry JSON + NMEA on `ttyUSB1` |
 | **IMU** | `i2cdetect -y 1` (BNO085 `0x4A`/`0x4B`) | live quaternion / Euler / linear accel | `i2c-tools` + Python BNO08x helper |
 | **Microphone** | `arecord -l` | live level meter, record to WAV | `arecord` (ALSA) |
 | **RGB LED** | `pinctrl get` | toggle R/G/B, all on/off | `pinctrl` (raspi-utils) |
 
 ### Notes per module
-- **Video recording** uses `rpicam-vid --codec libav` → MP4. The Pi 5 / CM5 has no hardware
+- **Cameras** come in two kinds, shown in one list. **CSI** (MIPI) cameras use rpicam-apps.
+  **UVC** USB cameras are V4L2 devices (rpicam can't drive them): enumerated with `v4l2-ctl`
+  (the capture node is auto-picked, skipping the metadata node) and captured with `ffmpeg`
+  (MJPG input → JPG snapshot / libx264 MP4). Needs `v4l-utils` + `ffmpeg`.
+- **Video recording** (CSI) uses `rpicam-vid --codec libav` → MP4. The Pi 5 / CM5 has no hardware
   H.264 encoder, so libav (software) does the encoding. The Lite image ships
   `rpicam-apps-lite` which lacks libav — if recording errors with "Unrecognised codec libav",
   install the full package: `sudo apt install rpicam-apps`. Snapshots work either way.
@@ -84,14 +88,10 @@ lets the whole UI run on macOS via `ARGUS_MOCK` (auto-on off-Linux, force with `
 npm test
 ```
 
-- Parser tests cover `rpicam --list-cameras`, `lsusb`, `i2cdetect`, `arecord -l`, `pinctrl get`,
-  PCM RMS, and the NMEA parser against fixtures in `src/mocks/`.
+- Parser tests cover `rpicam --list-cameras`, `v4l2-ctl` (devices + formats), `lsusb`,
+  `i2cdetect`, `arecord -l`, `pinctrl get`, PCM RMS, and the NMEA parser against fixtures in
+  `src/mocks/`.
 - UI smoke tests render every screen in mock mode and assert the expected data appears.
-
-## Deferred (not in this build)
-
-- **UVC USB camera** — only the 2 CSI/MIPI cameras are wired up. The USB webcam is a V4L2
-  device (`ffmpeg`/`v4l2-ctl`) and will be added as a third source later.
 
 ---
 

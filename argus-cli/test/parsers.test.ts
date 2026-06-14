@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { encoderHint, maxFps, parseCameraList } from "../src/hardware/camera.js";
+import {
+  encoderHint,
+  matchUsbId,
+  maxFps,
+  parseCameraList,
+  parseV4l2Devices,
+  parseV4l2Formats,
+} from "../src/hardware/camera.js";
 import { findModemLine } from "../src/hardware/lte.js";
 import { findImuAddress, parseI2cDetect } from "../src/hardware/imu.js";
 import {
@@ -17,6 +24,9 @@ import {
   I2CDETECT,
   I2CDETECT_4B,
   LSUSB,
+  V4L2_FORMATS,
+  V4L2_FORMATS_META,
+  V4L2_LIST_DEVICES,
   LSUSB_NO_MODEM,
   PINCTRL_GET_HIGH,
   PINCTRL_GET_LOW,
@@ -29,6 +39,7 @@ describe("parseCameraList", () => {
     const cams = parseCameraList(RPICAM_LIST);
     expect(cams).toHaveLength(2);
     expect(cams[0]).toMatchObject({
+      kind: "csi",
       index: 0,
       name: "imx290",
       maxResolution: "1920x1080",
@@ -66,6 +77,41 @@ describe("parseCameraList", () => {
 
   it("returns empty for 'No cameras available!'", () => {
     expect(parseCameraList(RPICAM_LIST_EMPTY)).toEqual([]);
+  });
+
+  it("turns ffmpeg/V4L2 errors into actionable hints", () => {
+    expect(encoderHint("[video4linux2 @ 0x...] /dev/video8: Device or resource busy")).toMatch(
+      /busy/i,
+    );
+    expect(encoderHint("Cannot open '/dev/video8': No such file or directory")).toMatch(
+      /V4L2 device/i,
+    );
+  });
+});
+
+describe("UVC (V4L2) parsers", () => {
+  it("parseV4l2Devices groups video nodes per device (drops media/vbi)", () => {
+    const devs = parseV4l2Devices(V4L2_LIST_DEVICES);
+    expect(devs).toHaveLength(1);
+    expect(devs[0].name).toBe("HD USB Camera");
+    expect(devs[0].nodes).toEqual(["/dev/video8", "/dev/video9"]);
+  });
+
+  it("parseV4l2Formats yields one mode per format+size with max fps", () => {
+    const modes = parseV4l2Formats(V4L2_FORMATS);
+    expect(modes).toContainEqual({ format: "MJPG", resolution: "1920x1080", fps: 60 });
+    expect(modes).toContainEqual({ format: "YUYV", resolution: "1280x720", fps: 10 });
+    expect(modes).toHaveLength(4);
+    expect(maxFps({ kind: "uvc", index: 8, name: "x", modes })).toBe(60);
+  });
+
+  it("parseV4l2Formats returns no modes for the metadata node", () => {
+    expect(parseV4l2Formats(V4L2_FORMATS_META)).toEqual([]);
+  });
+
+  it("matchUsbId finds the camera's USB id by name", () => {
+    expect(matchUsbId(LSUSB, "HD USB Camera")).toBe("32e4:2210");
+    expect(matchUsbId(LSUSB, "Nonexistent Cam")).toBeUndefined();
   });
 });
 

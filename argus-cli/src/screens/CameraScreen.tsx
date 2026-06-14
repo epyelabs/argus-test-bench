@@ -14,7 +14,7 @@ import {
   captureStill,
   defaultCaptureDir,
   encoderHint,
-  listCameras,
+  listAllCameras,
   maxFps,
   modesByFormat,
   recordVideo,
@@ -54,7 +54,7 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const r = await listCameras();
+      const r = await listAllCameras();
       if (!active) return;
       if (r.available) {
         setCameras(r.data);
@@ -85,9 +85,8 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
     if (!camera) return;
     setPhase("working");
     setResult(null);
-    const out = join(defaultCaptureDir(), `${camera.name}-cam${camera.index}-${stamp()}.jpg`);
-    const r = await captureStill({
-      index: camera.index,
+    const out = join(defaultCaptureDir(), `${captureSlug(camera)}-${stamp()}.jpg`);
+    const r = await captureStill(camera, {
       out,
       width: numOrUndef(settings.width),
       height: numOrUndef(settings.height),
@@ -102,11 +101,11 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
     setResult(null);
     setError(null);
     const durationSec = untilStop ? 0 : Math.max(1, parseInt(settings.durationSec, 10) || 5);
-    const out = join(defaultCaptureDir(), `${camera.name}-cam${camera.index}-${stamp()}.mp4`);
+    const out = join(defaultCaptureDir(), `${captureSlug(camera)}-${stamp()}.mp4`);
     recErrorRef.current = null;
     const r = await recordVideo(
+      camera,
       {
-        index: camera.index,
         durationMs: durationSec * 1000,
         fps: numOrUndef(settings.fps),
         width: numOrUndef(settings.width),
@@ -168,42 +167,38 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <Box flexDirection="column">
-      <Header title="Cameras (CSI)" />
+      <Header title="Cameras (CSI + USB)" />
       <Box flexDirection="column" paddingX={1}>
         {phase === "loading" ? (
           <Text>
-            <Spinner type="dots" /> Listing cameras (rpicam-hello)…
+            <Spinner type="dots" /> Listing cameras (rpicam + v4l2-ctl)…
           </Text>
         ) : null}
 
         {phase === "pick" ? (
           cameras.length === 0 ? (
             <Box flexDirection="column">
-              <Text color="yellow">No CSI cameras detected.</Text>
-              <Text color="gray">Check the FFC seating and camera dtoverlay.</Text>
+              <Text color="yellow">No cameras detected.</Text>
+              <Text color="gray">CSI: check FFC seating / dtoverlay. USB: check the UVC cable.</Text>
             </Box>
           ) : (
             <Box flexDirection="column">
               <Table
                 columns={[
                   { header: "#", cell: (c) => String(c.index) },
-                  { header: "Sensor", cell: (c) => c.name },
-                  { header: "Resolution", cell: (c) => c.maxResolution ?? "?" },
-                  { header: "Max FPS", cell: (c) => (c.modes.length ? String(maxFps(c)) : "?") },
-                  { header: "Depth", cell: (c) => c.bitDepth ?? "?" },
-                  { header: "Bayer", cell: (c) => c.bayer ?? "?" },
-                  { header: "Bus", cell: (c) => c.bus ?? "?" },
+                  { header: "Type", cell: (c) => c.kind.toUpperCase() },
+                  { header: "Name", cell: (c) => c.name },
+                  { header: "Resolution", cell: (c) => c.maxResolution ?? "—" },
+                  { header: "Max FPS", cell: (c) => (c.modes.length ? String(maxFps(c)) : "—") },
+                  { header: "Where", cell: (c) => (c.kind === "uvc" ? c.device ?? "—" : c.bus ?? "—") },
                 ]}
                 rows={cameras}
               />
               <Box marginTop={1}>
                 <SelectInput
-                  items={cameras.map((c) => ({
-                    label: `${c.index}: ${c.name}${c.bus ? ` (${c.bus})` : ""}`,
-                    value: c.index,
-                  }))}
+                  items={cameras.map((c, i) => ({ label: cameraLabel(c), value: i }))}
                   onSelect={(item) => {
-                    setCamera(cameras.find((c) => c.index === item.value) ?? null);
+                    setCamera(cameras[item.value] ?? null);
                     setPhase("actions");
                   }}
                 />
@@ -215,14 +210,19 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
         {phase === "actions" && camera ? (
           <Box flexDirection="column">
             <Text>
-              Selected <Text color="cyan">{camera.name}</Text> (camera {camera.index})
+              Selected <Text color="cyan">{camera.name}</Text>{" "}
+              <Text color="gray">
+                [{camera.kind.toUpperCase()}
+                {camera.kind === "uvc" ? ` ${camera.device}` : ` cam${camera.index}`}
+                {camera.usbId ? ` · ${camera.usbId}` : ""}]
+              </Text>
             </Text>
             <Text color="gray">
-              {camera.maxResolution ?? "?"} · up to {maxFps(camera)}fps · {camera.bitDepth ?? "?"} ·{" "}
-              {camera.bayer ?? "?"} · {camera.bus ?? "?"}
+              {camera.maxResolution ?? "—"} · up to {maxFps(camera)}fps
+              {camera.kind === "csi" ? ` · ${camera.bitDepth ?? "?"} · ${camera.bayer ?? "?"} · ${camera.bus ?? "?"}` : ""}
             </Text>
             <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
-              <Text color="gray">Sensor modes</Text>
+              <Text color="gray">{camera.kind === "uvc" ? "Formats" : "Sensor modes"}</Text>
               {modesByFormat(camera).map((g) => (
                 <Text key={g.format}>
                   <Text color="cyan">{g.format}</Text>{" "}
@@ -343,4 +343,17 @@ function numOrUndef(s: string): number | undefined {
 
 function stamp(): string {
   return fileStamp(new Date().toISOString());
+}
+
+/** Filesystem-safe name for a capture, e.g. "imx290-cam0" or "HD_USB_Camera-video8". */
+function captureSlug(camera: Camera): string {
+  const name = camera.name.replace(/[^0-9A-Za-z]+/g, "_").replace(/^_+|_+$/g, "");
+  const tag = camera.kind === "uvc" ? camera.device?.split("/").pop() : `cam${camera.index}`;
+  return `${name}-${tag}`;
+}
+
+/** Picker label that disambiguates sources (bus for CSI, device node for UVC). */
+function cameraLabel(camera: Camera): string {
+  const where = camera.kind === "uvc" ? camera.device : camera.bus;
+  return `${camera.kind.toUpperCase()} · ${camera.name}${where ? ` (${where})` : ""}`;
 }
