@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOT_CONFIG="/boot/firmware/config.txt"
 
 # Ordered list of steps run when no argument is given.
-STEPS=(step1 step2 step3 step4 step5 step6)
+STEPS=(step1 step2 step3 step4 step5 step6 step7)
 
 # STEP 1: Install Nodejs (using nvm)
 step1() {
@@ -113,6 +113,16 @@ step6() {
   echo "[install] Installing LTE connection manager..."
   # Nested installer is self-contained (resolves its own dir, sudoes internally).
   bash "$SCRIPT_DIR/argus-connection-manager/install.sh"
+}
+
+# STEP 7 - Build argus-cli and link the `argus` command onto PATH.
+step7() {
+  echo "[install] Building argus-cli and linking the 'argus' command..."
+  # Subshell cd keeps cwd local; bare `npm link` (no --prefix) creates the global
+  # `argus` -> dist/cli.js symlink in nvm's bin (no sudo). dist/cli.js keeps its
+  # #!/usr/bin/env node shebang, so it's directly executable.
+  ( cd "$SCRIPT_DIR/argus-cli" && npm run build && npm link )
+  echo "[install] 'argus' linked — open a new shell (or 'source ~/.bashrc'), then run: argus"
 }
 
 usage() {
