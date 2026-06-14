@@ -5,6 +5,8 @@ Raspberry Pi CM5 carrier board with dual CSI cameras (plus USB/UVC), a SIM7600G 
 a BNO085 IMU, an SPH0645 I2S microphone, and an RGB status LED. Target OS is **Raspberry Pi OS
 Bookworm 64-bit Lite**.
 
+![Argus CLI screenshot](argus-cli/assets/screenshot.png)
+
 ## Quick start
 
 On a Raspberry Pi CM5 (Argus board, RPi OS Bookworm 64-bit Lite):
