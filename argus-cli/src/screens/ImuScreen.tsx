@@ -8,7 +8,12 @@ import { IMU } from "../config/hardware.js";
 import { signedFixed, toHexAddr } from "../lib/format.js";
 import { quatToEuler } from "../lib/orientation.js";
 import type { StreamHandle } from "../lib/exec.js";
-import { detectImu, streamImuData, type ImuDetect, type ImuSample } from "../hardware/imu.js";
+import {
+  detectImu,
+  streamImuData,
+  type ImuDetect,
+  type ImuSample,
+} from "../hardware/imu.js";
 import type { HalResult } from "../hardware/types.js";
 
 export function ImuScreen({ onBack }: { onBack: () => void }) {
@@ -90,16 +95,19 @@ export function ImuScreen({ onBack }: { onBack: () => void }) {
                   ? `present (found at ${toHexAddr(result.data.imuAddress!)})`
                   : "NOT found"}
               </StatusBadge>
-              <StatusBadge status={result.data.bmsPresent ? "ok" : "unknown"}>
-                BMS (MP2696) @ {toHexAddr(IMU.bmsAddress)} —{" "}
-                {result.data.bmsPresent ? "present (shares bus)" : "not seen"}
-              </StatusBadge>
             </Box>
           )}
         </Box>
 
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
-          <Text color="gray">Live motion data (rotation vector + linear acceleration)</Text>
+        <Box
+          flexDirection="column"
+          borderStyle="round"
+          borderColor="gray"
+          paddingX={1}
+        >
+          <Text color="gray">
+            Live motion data (rotation vector + linear acceleration)
+          </Text>
 
           {streaming && !ready ? (
             <Text>
@@ -110,26 +118,34 @@ export function ImuScreen({ onBack }: { onBack: () => void }) {
           {streaming && ready && sample ? (
             <Box flexDirection="column">
               <Text>
-                <Text color="cyan">quat </Text>
-                r{signedFixed(sample.quat.r, 3)} i{signedFixed(sample.quat.i, 3)} j
+                <Text color="cyan">quat </Text>r{signedFixed(sample.quat.r, 3)}{" "}
+                i{signedFixed(sample.quat.i, 3)} j
                 {signedFixed(sample.quat.j, 3)} k{signedFixed(sample.quat.k, 3)}
               </Text>
               <Text>
-                <Text color="cyan">euler</Text> roll {signedFixed(euler!.roll, 1)}° pitch{" "}
-                {signedFixed(euler!.pitch, 1)}° yaw {signedFixed(euler!.yaw, 1)}°
+                <Text color="cyan">euler</Text> roll{" "}
+                {signedFixed(euler!.roll, 1)}° pitch{" "}
+                {signedFixed(euler!.pitch, 1)}° yaw {signedFixed(euler!.yaw, 1)}
+                °
               </Text>
               <Text>
-                <Text color="cyan">accel</Text> x{signedFixed(sample.linaccel.x, 2)} y
-                {signedFixed(sample.linaccel.y, 2)} z{signedFixed(sample.linaccel.z, 2)} m/s²
+                <Text color="cyan">accel</Text> x
+                {signedFixed(sample.linaccel.x, 2)} y
+                {signedFixed(sample.linaccel.y, 2)} z
+                {signedFixed(sample.linaccel.z, 2)} m/s²
               </Text>
             </Box>
           ) : null}
 
-          {!streaming && streamError ? <Text color="red">⚠ {streamError}</Text> : null}
+          {!streaming && streamError ? (
+            <Text color="red">⚠ {streamError}</Text>
+          ) : null}
 
           {!streaming && !streamError ? (
             <Text color={present ? "gray" : "yellow"}>
-              {present ? "Press d to start the live reader." : "Sensor not detected — cannot stream."}
+              {present
+                ? "Press d to start the live reader."
+                : "Sensor not detected — cannot stream."}
             </Text>
           ) : null}
         </Box>
