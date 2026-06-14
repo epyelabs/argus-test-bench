@@ -128,3 +128,5 @@ export const NMEA_LINES = [
 /** `pinctrl get <n>` sample lines (level after the `=` style varies by version). */
 export const PINCTRL_GET_HIGH = "12: op dh pn | hi // GPIO12 = output";
 export const PINCTRL_GET_LOW = "16: op dl pd | lo // GPIO16 = output";
+/** Freshly booted pin, never driven: function "none", no level. */
+export const PINCTRL_GET_NONE = "12: no    pd | -- // GPIO12 = none";

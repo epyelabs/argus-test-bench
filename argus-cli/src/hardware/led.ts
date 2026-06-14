@@ -39,11 +39,19 @@ export async function setLed(color: LedColor, on: boolean): Promise<HalResult<{ 
   return ok({ on });
 }
 
-/** Parse the level token from a `pinctrl get` line, e.g. "...| hi //". */
+/**
+ * Parse the level token from a `pinctrl get` line, e.g. "...| hi //".
+ *
+ * A freshly booted pin that has never been driven reports function `no`
+ * (none) with no level ("12: no    pd | -- // GPIO12 = none"). That is not a
+ * parse failure: an active-HIGH LED that isn't driven is simply OFF, so we
+ * report it as low. Once toggled, the pin becomes an output and reads hi/lo.
+ */
 export function parsePinctrlLevel(line: string): boolean | null {
   const m = line.match(/\|\s*(hi|lo)\b/i) ?? line.match(/\b(hi|lo)\b/i);
-  if (!m) return null;
-  return m[1].toLowerCase() === "hi";
+  if (m) return m[1].toLowerCase() === "hi";
+  if (/\|\s*--/.test(line)) return false;
+  return null;
 }
 
 export async function getLed(color: LedColor): Promise<HalResult<{ on: boolean }>> {

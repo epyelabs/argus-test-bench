@@ -30,6 +30,7 @@ import {
   LSUSB_NO_MODEM,
   PINCTRL_GET_HIGH,
   PINCTRL_GET_LOW,
+  PINCTRL_GET_NONE,
   RPICAM_LIST,
   RPICAM_LIST_EMPTY,
 } from "../src/mocks/fixtures.js";
@@ -174,6 +175,9 @@ describe("parsePinctrlLevel", () => {
   it("reads hi / lo", () => {
     expect(parsePinctrlLevel(PINCTRL_GET_HIGH)).toBe(true);
     expect(parsePinctrlLevel(PINCTRL_GET_LOW)).toBe(false);
+  });
+  it("treats a freshly booted undriven pin (none, --) as off", () => {
+    expect(parsePinctrlLevel(PINCTRL_GET_NONE)).toBe(false);
   });
   it("returns null on unparseable output", () => {
     expect(parsePinctrlLevel("nonsense")).toBeNull();
