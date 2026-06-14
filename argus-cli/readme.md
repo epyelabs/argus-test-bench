@@ -5,8 +5,7 @@ peripherals on the **Argus CM5 Edge Video Node v1.0** board. It runs on a Raspbe
 (RPi OS Bookworm 64-bit Lite) and exercises each module from one menu: cameras, the
 LTE/GNSS modem, the IMU, the I2S microphone, and the RGB LED.
 
-Hardware pin/address/device facts come from `../Argus-Board_PCBA-v1.0-User-Guide-Rev-B.pdf`
-and live in one place: [src/config/hardware.ts](src/config/hardware.ts).
+![Argus CLI screenshot](assets/screenshot.png)
 
 ## Quick start
 
@@ -28,15 +27,16 @@ Navigation: `↑↓` move, `↵` select, `q`/`Esc` go back, `q` on the home menu
 
 ## Modules & how each is driven
 
-| Module | Detect | Actions | Underlying tool |
-|--------|--------|---------|-----------------|
-| **Cameras** (CSI + USB) | `rpicam-hello --list-cameras` + `v4l2-ctl --list-devices` | snapshot, record (res/fps/duration) | CSI: `rpicam-still`/`rpicam-vid` · UVC: `ffmpeg` |
-| **LTE / GNSS** | `lsusb` (SimCom `1e0e:9011`) + `/dev/ttyUSB*` | live signal, GPS fix | telemetry JSON + NMEA on `ttyUSB1` |
-| **IMU** | `i2cdetect -y 1` (BNO085 `0x4A`/`0x4B`) | live quaternion / Euler / linear accel | `i2c-tools` + Python BNO08x helper |
-| **Microphone** | `arecord -l` | live level meter, record to WAV | `arecord` (ALSA) |
-| **RGB LED** | `pinctrl get` | toggle R/G/B, all on/off | `pinctrl` (raspi-utils) |
+| Module                  | Detect                                                    | Actions                                | Underlying tool                                  |
+| ----------------------- | --------------------------------------------------------- | -------------------------------------- | ------------------------------------------------ |
+| **Cameras** (CSI + USB) | `rpicam-hello --list-cameras` + `v4l2-ctl --list-devices` | snapshot, record (res/fps/duration)    | CSI: `rpicam-still`/`rpicam-vid` · UVC: `ffmpeg` |
+| **LTE / GNSS**          | `lsusb` (SimCom `1e0e:9011`) + `/dev/ttyUSB*`             | live signal, GPS fix                   | telemetry JSON + NMEA on `ttyUSB1`               |
+| **IMU**                 | `i2cdetect -y 1` (BNO085 `0x4A`/`0x4B`)                   | live quaternion / Euler / linear accel | `i2c-tools` + Python BNO08x helper               |
+| **Microphone**          | `arecord -l`                                              | live level meter, record to WAV        | `arecord` (ALSA)                                 |
+| **RGB LED**             | `pinctrl get`                                             | toggle R/G/B, all on/off               | `pinctrl` (raspi-utils)                          |
 
 ### Notes per module
+
 - **Cameras** come in two kinds, shown in one list. **CSI** (MIPI) cameras use rpicam-apps.
   **UVC** USB cameras are V4L2 devices (rpicam can't drive them): enumerated with `v4l2-ctl`
   (the capture node is auto-picked, skipping the metadata node) and captured with `ffmpeg`
