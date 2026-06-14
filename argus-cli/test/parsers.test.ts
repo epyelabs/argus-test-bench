@@ -16,8 +16,9 @@ import {
   s32StereoToMonoS16,
   encodeWavPcm16,
 } from "../src/hardware/mic.js";
-import { parsePinctrlLevel } from "../src/hardware/led.js";
-import { IMU, LTE, MIC } from "../src/config/hardware.js";
+import { parsePinctrlLevel } from "../src/hardware/gpio.js";
+import { decodeBoardId } from "../src/hardware/boardId.js";
+import { BOARD_ID, IMU, LTE, MIC } from "../src/config/hardware.js";
 import {
   ARECORD_L,
   ARECORD_L_NONE,
@@ -30,6 +31,7 @@ import {
   LSUSB_NO_MODEM,
   PINCTRL_GET_HIGH,
   PINCTRL_GET_LOW,
+  PINCTRL_GET_NONE,
   RPICAM_LIST,
   RPICAM_LIST_EMPTY,
 } from "../src/mocks/fixtures.js";
@@ -175,8 +177,28 @@ describe("parsePinctrlLevel", () => {
     expect(parsePinctrlLevel(PINCTRL_GET_HIGH)).toBe(true);
     expect(parsePinctrlLevel(PINCTRL_GET_LOW)).toBe(false);
   });
+  it("treats a freshly booted undriven pin (none, --) as off", () => {
+    expect(parsePinctrlLevel(PINCTRL_GET_NONE)).toBe(false);
+  });
   it("returns null on unparseable output", () => {
     expect(parsePinctrlLevel("nonsense")).toBeNull();
+  });
+});
+
+describe("decodeBoardId", () => {
+  it("decodes the all-low strap to the known v1.0 board", () => {
+    const { code, partNumber } = decodeBoardId([false, false, false]);
+    expect(code).toBe("000");
+    expect(partNumber).toBe(BOARD_ID.known["000"]);
+  });
+
+  it("joins bits in gpios order (gpios[0] first)", () => {
+    expect(decodeBoardId([true, false, false]).code).toBe("100");
+    expect(decodeBoardId([false, false, true]).code).toBe("001");
+  });
+
+  it("returns no part number for an unrecognized strap", () => {
+    expect(decodeBoardId([true, false, true]).partNumber).toBeNull();
   });
 });
 

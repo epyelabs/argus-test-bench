@@ -6,9 +6,23 @@ import { LteScreen } from "../src/screens/LteScreen.js";
 import { ImuScreen } from "../src/screens/ImuScreen.js";
 import { MicScreen } from "../src/screens/MicScreen.js";
 import { LedScreen } from "../src/screens/LedScreen.js";
+import { BoardIdScreen } from "../src/screens/BoardIdScreen.js";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const noop = () => {};
+
+// Arrow keys are escape sequences; send one per data event with a tick between.
+const ARROW = { up: "[A", down: "[B" } as const;
+async function pressArrow(
+  stdin: { write: (s: string) => void },
+  dir: keyof typeof ARROW,
+  times = 1,
+) {
+  for (let i = 0; i < times; i++) {
+    stdin.write(ARROW[dir]);
+    await delay(20);
+  }
+}
 
 // Force the HAL into fixture mode so the UI is deterministic on any host.
 beforeAll(() => {
@@ -16,12 +30,76 @@ beforeAll(() => {
 });
 
 describe("UI smoke (mock mode)", () => {
-  it("renders the home menu", async () => {
+  it("renders the master-detail dashboard with all modules listed", async () => {
     const { lastFrame, unmount } = render(<App />);
-    await delay(30);
-    expect(lastFrame()).toContain("ARGUS Test Bench");
-    expect(lastFrame()).toContain("Cameras");
-    expect(lastFrame()).toContain("RGB LED");
+    await delay(150);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("ARGUS Test Bench");
+    expect(frame).toContain("CPU"); // header renders live system metrics
+    // The left list pins every module at once…
+    expect(frame).toContain("LTE / GNSS");
+    expect(frame).toContain("IMU");
+    expect(frame).toContain("RGB LED");
+    expect(frame).toContain("Microphone");
+    expect(frame).toContain("Cameras");
+    expect(frame).toContain("Board ID");
+    // …and the right pane previews the default selection (LTE), not the others.
+    expect(frame).toContain("Signal"); // LTE detail body
+    expect(frame).not.toContain("imx290"); // Camera detail hidden
+    expect(frame).not.toContain("BNO085"); // IMU detail hidden
+    unmount();
+  });
+
+  it("↓ changes which module the detail pane previews", async () => {
+    const { lastFrame, stdin, unmount } = render(<App />);
+    await delay(120);
+    expect(lastFrame()).not.toContain("imx290"); // LTE selected, Camera hidden
+    // LTE → Cameras (index 1).
+    await pressArrow(stdin, "down", 1);
+    await delay(60);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("imx290"); // Camera detail now shown
+    expect(frame).not.toContain("Signal"); // LTE detail hidden
+    unmount();
+  });
+
+  it("Enter operates the selected module (process runs in the detail pane)", async () => {
+    const { lastFrame, stdin, unmount } = render(<App />);
+    await delay(120);
+    await pressArrow(stdin, "down", 3); // select IMU
+    await delay(20);
+    stdin.write("\r"); // enter the detail to operate it
+    await delay(20);
+    stdin.write("d"); // start the live stream
+    await delay(200);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("euler");
+    expect(frame).toContain("m/s²");
+    unmount();
+  });
+
+  it("keeps the IMU stream running after leaving and navigating away", async () => {
+    const { lastFrame, stdin, unmount } = render(<App />);
+    await delay(120);
+    await pressArrow(stdin, "down", 3); // select IMU
+    await delay(20);
+    stdin.write("\r"); // operate
+    await delay(20);
+    stdin.write("d"); // start the live stream
+    await delay(200);
+    expect(lastFrame()).toContain("euler");
+    // Esc returns to the list WITHOUT stopping the stream.
+    stdin.write("");
+    await delay(40);
+    expect(lastFrame()).toContain("select"); // back at the list (LIST_HINTS footer)
+    // Navigate to another module → IMU detail hidden.
+    await pressArrow(stdin, "down", 1); // select RGB LED
+    await delay(40);
+    expect(lastFrame()).not.toContain("euler");
+    // Come back → the stream is still running.
+    await pressArrow(stdin, "up", 1); // back to IMU
+    await delay(60);
+    expect(lastFrame()).toContain("euler");
     unmount();
   });
 
@@ -54,6 +132,42 @@ describe("UI smoke (mock mode)", () => {
     stdin.write("g");
     await delay(60);
     expect(lastFrame()).toContain("14.50");
+    unmount();
+  });
+
+  it("LTE screen lists the M.2 control pins at their hardware defaults", async () => {
+    const { lastFrame, unmount } = render(<LteScreen onBack={noop} />);
+    await delay(60);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("FULL_CARD_POWER_OFF#");
+    expect(frame).toContain("GNSS_DISABLE");
+    expect(frame).toContain("WWAN_DISABLE");
+    expect(frame).toContain("NGFF_RESET#");
+    expect(frame).toContain("WAKE_ON_WAN#");
+    expect(frame).toContain("WWAN ON"); // power default = 1
+    expect(frame).toContain("GNSS active"); // gnss default = 1
+    expect(frame).toContain("(read-only)"); // the wake input row
+    unmount();
+  });
+
+  it("LTE screen does not toggle pins on arrow keys", async () => {
+    const { lastFrame, stdin, unmount } = render(<LteScreen onBack={noop} />);
+    await delay(60);
+    expect(lastFrame()).toContain("WWAN ON"); // GPIO5 default high
+    stdin.write("[C"); // right arrow
+    stdin.write("[D"); // left arrow
+    await delay(60);
+    expect(lastFrame()).toContain("WWAN ON"); // still high — arrows are ignored
+    unmount();
+  });
+
+  it("LTE screen toggles an output pin with a number key", async () => {
+    const { lastFrame, stdin, unmount } = render(<LteScreen onBack={noop} />);
+    await delay(60);
+    expect(lastFrame()).toContain("WWAN ON"); // GPIO5 starts high (1)
+    stdin.write("1"); // toggle FULL_CARD_POWER_OFF# low
+    await delay(60);
+    expect(lastFrame()).toContain("WWAN OFF");
     unmount();
   });
 
@@ -95,6 +209,16 @@ describe("UI smoke (mock mode)", () => {
     expect(frame).toContain("RED");
     expect(frame).toContain("GREEN");
     expect(frame).toContain("BLUE");
+    unmount();
+  });
+
+  it("Board ID screen shows the decoded code and part number", async () => {
+    const { lastFrame, unmount } = render(<BoardIdScreen onBack={noop} />);
+    await delay(40);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("000"); // decoded strap code
+    expect(frame).toContain("ARGUS:A:A:00"); // mapped part number
+    expect(frame).toContain("GPIO26"); // per-pin breakdown
     unmount();
   });
 });

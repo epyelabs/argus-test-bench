@@ -3,8 +3,6 @@ import { Box, Text, useInput } from "ink";
 import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
-import { Header } from "../components/Header.js";
-import { KeyHints } from "../components/KeyHints.js";
 import { LogView } from "../components/LogView.js";
 import { Table } from "../components/Table.js";
 import { fileStamp, formatDuration } from "../lib/format.js";
@@ -20,6 +18,8 @@ import {
   recordVideo,
 } from "../hardware/camera.js";
 import { join } from "node:path";
+import { noop, type ModuleStatus, type ModuleViewProps } from "../dashboard/moduleView.js";
+import type { Hint } from "../components/KeyHints.js";
 
 type Phase = "loading" | "pick" | "actions" | "settings" | "working" | "recording" | "result";
 
@@ -32,7 +32,15 @@ interface Settings {
 
 const SETTINGS_FIELDS: (keyof Settings)[] = ["width", "height", "fps", "durationSec"];
 
-export function CameraScreen({ onBack }: { onBack: () => void }) {
+export function CameraScreen({
+  visible = true,
+  active = true,
+  onStatus = noop,
+  onHints = noop,
+  onExit,
+  onBack,
+}: ModuleViewProps) {
+  const exit = onExit ?? onBack ?? noop;
   const [phase, setPhase] = useState<Phase>("loading");
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [camera, setCamera] = useState<Camera | null>(null);
@@ -52,10 +60,10 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
   const recErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
-    let active = true;
+    let alive = true;
     void (async () => {
       const r = await listAllCameras();
-      if (!active) return;
+      if (!alive) return;
       if (r.available) {
         setCameras(r.data);
         setPhase("pick");
@@ -65,9 +73,12 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
       }
     })();
     return () => {
-      active = false;
+      alive = false;
     };
   }, []);
+
+  // Stop any in-flight recording on (true) unmount — i.e. app exit.
+  useEffect(() => () => handleRef.current?.stop(), []);
 
   // Recording elapsed timer; resolves to result when the process exits.
   useEffect(() => {
@@ -76,6 +87,15 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
     const timer = setInterval(() => setElapsed((Date.now() - start) / 1000), 250);
     return () => clearInterval(timer);
   }, [phase]);
+
+  const status = cameraStatus(phase, cameras.length, !!error);
+  useEffect(() => {
+    onStatus(status);
+  }, [status.label, status.status, onStatus]);
+
+  useEffect(() => {
+    if (active) onHints(hintsFor(phase));
+  }, [active, phase, onHints]);
 
   function appendLog(line: string) {
     setLog((l) => [...l, line]);
@@ -139,188 +159,215 @@ export function CameraScreen({ onBack }: { onBack: () => void }) {
     });
   }
 
-  useInput((input, key) => {
-    if (phase === "recording") {
-      if (input === "s" || key.escape) handleRef.current?.stop();
-      return;
-    }
-    if (phase === "result") {
-      if (key.return || input === " ") {
-        setError(null);
-        setResult(null);
-        setPhase(camera ? "actions" : "pick");
-      } else if (input === "q" || key.escape) {
-        onBack();
+  useInput(
+    (input, key) => {
+      if (phase === "recording") {
+        // `s` stops recording; q/Esc leaves to the list but keeps recording.
+        if (input === "s") handleRef.current?.stop();
+        else if (input === "q" || key.escape) exit();
+        return;
       }
-      return;
-    }
-    if (phase === "settings") {
-      if (key.escape) setPhase("actions");
-      return;
-    }
-    // pick / actions: q or Esc steps back
-    if (input === "q" || key.escape) {
-      if (phase === "actions") setPhase("pick");
-      else onBack();
-    }
-  });
+      if (phase === "result") {
+        if (key.return || input === " ") {
+          setError(null);
+          setResult(null);
+          setPhase(camera ? "actions" : "pick");
+        } else if (input === "q" || key.escape) {
+          exit();
+        }
+        return;
+      }
+      if (phase === "settings") {
+        if (key.escape) setPhase("actions");
+        return;
+      }
+      // pick / actions: q or Esc steps back
+      if (input === "q" || key.escape) {
+        if (phase === "actions") setPhase("pick");
+        else exit();
+      }
+    },
+    { isActive: active },
+  );
+
+  if (!visible) return null;
 
   return (
     <Box flexDirection="column">
-      <Header title="Cameras (CSI + USB)" />
-      <Box flexDirection="column" paddingX={1}>
-        {phase === "loading" ? (
-          <Text>
-            <Spinner type="dots" /> Listing cameras (rpicam + v4l2-ctl)…
-          </Text>
-        ) : null}
+      {phase === "loading" ? (
+        <Text>
+          <Spinner type="dots" /> Listing cameras (rpicam + v4l2-ctl)…
+        </Text>
+      ) : null}
 
-        {phase === "pick" ? (
-          cameras.length === 0 ? (
-            <Box flexDirection="column">
-              <Text color="yellow">No cameras detected.</Text>
-              <Text color="gray">CSI: check FFC seating / dtoverlay. USB: check the UVC cable.</Text>
-            </Box>
-          ) : (
-            <Box flexDirection="column">
-              <Table
-                columns={[
-                  { header: "#", cell: (c) => String(c.index) },
-                  { header: "Type", cell: (c) => c.kind.toUpperCase() },
-                  { header: "Name", cell: (c) => c.name },
-                  { header: "Resolution", cell: (c) => c.maxResolution ?? "—" },
-                  { header: "Max FPS", cell: (c) => (c.modes.length ? String(maxFps(c)) : "—") },
-                  { header: "Where", cell: (c) => (c.kind === "uvc" ? c.device ?? "—" : c.bus ?? "—") },
-                ]}
-                rows={cameras}
-              />
-              <Box marginTop={1}>
-                <SelectInput
-                  items={cameras.map((c, i) => ({ label: cameraLabel(c), value: i }))}
-                  onSelect={(item) => {
-                    setCamera(cameras[item.value] ?? null);
-                    setPhase("actions");
-                  }}
-                />
-              </Box>
-            </Box>
-          )
-        ) : null}
-
-        {phase === "actions" && camera ? (
+      {phase === "pick" ? (
+        cameras.length === 0 ? (
           <Box flexDirection="column">
-            <Text>
-              Selected <Text color="cyan">{camera.name}</Text>{" "}
-              <Text color="gray">
-                [{camera.kind.toUpperCase()}
-                {camera.kind === "uvc" ? ` ${camera.device}` : ` cam${camera.index}`}
-                {camera.usbId ? ` · ${camera.usbId}` : ""}]
-              </Text>
-            </Text>
-            <Text color="gray">
-              {camera.maxResolution ?? "—"} · up to {maxFps(camera)}fps
-              {camera.kind === "csi" ? ` · ${camera.bitDepth ?? "?"} · ${camera.bayer ?? "?"} · ${camera.bus ?? "?"}` : ""}
-            </Text>
-            <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
-              <Text color="gray">{camera.kind === "uvc" ? "Formats" : "Sensor modes"}</Text>
-              {modesByFormat(camera).map((g) => (
-                <Text key={g.format}>
-                  <Text color="cyan">{g.format}</Text>{" "}
-                  {g.modes.map((m) => `${m.resolution}@${m.fps}`).join("  ")}
-                </Text>
-              ))}
-            </Box>
-            <Text color="gray">
-              res {settings.width || "full"}×{settings.height || "full"}  ·  {settings.fps}fps  ·{" "}
-              {settings.durationSec}s
-            </Text>
+            <Text color="yellow">No cameras detected.</Text>
+            <Text color="gray">CSI: check FFC seating / dtoverlay. USB: check the UVC cable.</Text>
+          </Box>
+        ) : (
+          <Box flexDirection="column">
+            <Table
+              columns={[
+                { header: "#", cell: (c) => String(c.index) },
+                { header: "Type", cell: (c) => c.kind.toUpperCase() },
+                { header: "Name", cell: (c) => c.name },
+                { header: "Resolution", cell: (c) => c.maxResolution ?? "—" },
+                { header: "Max FPS", cell: (c) => (c.modes.length ? String(maxFps(c)) : "—") },
+                {
+                  header: "Where",
+                  cell: (c) => (c.kind === "uvc" ? c.device ?? "—" : c.bus ?? "—"),
+                },
+              ]}
+              rows={cameras}
+            />
             <Box marginTop={1}>
               <SelectInput
-                items={[
-                  { label: "📸  Snapshot", value: "snap" },
-                  { label: `🎬  Record ${settings.durationSec}s`, value: "rec" },
-                  { label: "🎬  Record until stopped", value: "recstop" },
-                  { label: "⚙   Settings (resolution / fps / duration)", value: "settings" },
-                  { label: "←  Back to camera list", value: "back" },
-                ]}
+                isFocused={active}
+                items={cameras.map((c, i) => ({ label: cameraLabel(c), value: i }))}
                 onSelect={(item) => {
-                  if (item.value === "snap") void doSnapshot();
-                  else if (item.value === "rec") void doRecord(false);
-                  else if (item.value === "recstop") void doRecord(true);
-                  else if (item.value === "settings") {
-                    setActiveField(0);
-                    setPhase("settings");
-                  } else setPhase("pick");
+                  setCamera(cameras[item.value] ?? null);
+                  setPhase("actions");
                 }}
               />
             </Box>
           </Box>
-        ) : null}
+        )
+      ) : null}
 
-        {phase === "settings" ? (
-          <Box flexDirection="column">
-            <Text color="gray">Enter to advance; blank width/height = native full resolution.</Text>
-            {SETTINGS_FIELDS.map((field, i) => (
-              <Box key={field}>
-                <Text color={i === activeField ? "cyan" : "gray"}>{field.padEnd(12)} </Text>
-                <TextInput
-                  value={settings[field]}
-                  focus={i === activeField}
-                  onChange={(v) => setSettings((s) => ({ ...s, [field]: v.replace(/[^0-9]/g, "") }))}
-                  onSubmit={() => {
-                    if (activeField < SETTINGS_FIELDS.length - 1) setActiveField(activeField + 1);
-                    else setPhase("actions");
-                  }}
-                />
-              </Box>
+      {phase === "actions" && camera ? (
+        <Box flexDirection="column">
+          <Text>
+            Selected <Text color="cyan">{camera.name}</Text>{" "}
+            <Text color="gray">
+              [{camera.kind.toUpperCase()}
+              {camera.kind === "uvc" ? ` ${camera.device}` : ` cam${camera.index}`}
+              {camera.usbId ? ` · ${camera.usbId}` : ""}]
+            </Text>
+          </Text>
+          <Text color="gray">
+            {camera.maxResolution ?? "—"} · up to {maxFps(camera)}fps
+            {camera.kind === "csi"
+              ? ` · ${camera.bitDepth ?? "?"} · ${camera.bayer ?? "?"} · ${camera.bus ?? "?"}`
+              : ""}
+          </Text>
+          <Box
+            flexDirection="column"
+            marginTop={1}
+            borderStyle="round"
+            borderColor="gray"
+            paddingX={1}
+          >
+            <Text color="gray">{camera.kind === "uvc" ? "Formats" : "Sensor modes"}</Text>
+            {modesByFormat(camera).map((g) => (
+              <Text key={g.format}>
+                <Text color="cyan">{g.format}</Text>{" "}
+                {g.modes.map((m) => `${m.resolution}@${m.fps}`).join("  ")}
+              </Text>
             ))}
           </Box>
-        ) : null}
-
-        {phase === "working" ? (
-          <Text>
-            <Spinner type="dots" /> Capturing…
+          <Text color="gray">
+            res {settings.width || "full"}×{settings.height || "full"}  ·  {settings.fps}fps  ·{" "}
+            {settings.durationSec}s
           </Text>
-        ) : null}
+          <Box marginTop={1}>
+            <SelectInput
+              isFocused={active}
+              items={[
+                { label: "📸  Snapshot", value: "snap" },
+                { label: `🎬  Record ${settings.durationSec}s`, value: "rec" },
+                { label: "🎬  Record until stopped", value: "recstop" },
+                { label: "⚙   Settings (resolution / fps / duration)", value: "settings" },
+                { label: "←  Back to camera list", value: "back" },
+              ]}
+              onSelect={(item) => {
+                if (item.value === "snap") void doSnapshot();
+                else if (item.value === "rec") void doRecord(false);
+                else if (item.value === "recstop") void doRecord(true);
+                else if (item.value === "settings") {
+                  setActiveField(0);
+                  setPhase("settings");
+                } else setPhase("pick");
+              }}
+            />
+          </Box>
+        </Box>
+      ) : null}
 
-        {phase === "recording" ? (
-          <Box flexDirection="column">
-            <Text color="red">● REC </Text>
-            <Text>
-              {camera?.name} · {formatDuration(elapsed)} elapsed
-            </Text>
+      {phase === "settings" ? (
+        <Box flexDirection="column">
+          <Text color="gray">Enter to advance; blank width/height = native full resolution.</Text>
+          {SETTINGS_FIELDS.map((field, i) => (
+            <Box key={field}>
+              <Text color={i === activeField ? "cyan" : "gray"}>{field.padEnd(12)} </Text>
+              <TextInput
+                value={settings[field]}
+                focus={active && i === activeField}
+                onChange={(v) => setSettings((s) => ({ ...s, [field]: v.replace(/[^0-9]/g, "") }))}
+                onSubmit={() => {
+                  if (activeField < SETTINGS_FIELDS.length - 1) setActiveField(activeField + 1);
+                  else setPhase("actions");
+                }}
+              />
+            </Box>
+          ))}
+        </Box>
+      ) : null}
+
+      {phase === "working" ? (
+        <Text>
+          <Spinner type="dots" /> Capturing…
+        </Text>
+      ) : null}
+
+      {phase === "recording" ? (
+        <Box flexDirection="column">
+          <Text color="red">● REC </Text>
+          <Text>
+            {camera?.name} · {formatDuration(elapsed)} elapsed
+          </Text>
+          <Box marginTop={1}>
+            <LogView lines={log} title="rpicam-vid" />
+          </Box>
+        </Box>
+      ) : null}
+
+      {phase === "result" ? (
+        <Box flexDirection="column">
+          {result ? <Text color="green">✓ {result}</Text> : null}
+          {error ? <Text color="red">⚠ {error}</Text> : null}
+          {log.length ? (
             <Box marginTop={1}>
               <LogView lines={log} title="rpicam-vid" />
             </Box>
-          </Box>
-        ) : null}
-
-        {phase === "result" ? (
-          <Box flexDirection="column">
-            {result ? <Text color="green">✓ {result}</Text> : null}
-            {error ? <Text color="red">⚠ {error}</Text> : null}
-            {log.length ? (
-              <Box marginTop={1}>
-                <LogView lines={log} title="rpicam-vid" />
-              </Box>
-            ) : null}
-          </Box>
-        ) : null}
-      </Box>
-
-      <KeyHints hints={hintsFor(phase)} />
+          ) : null}
+        </Box>
+      ) : null}
     </Box>
   );
 }
 
-function hintsFor(phase: Phase) {
+function cameraStatus(phase: Phase, count: number, hasError: boolean): ModuleStatus {
+  if (phase === "loading") return { label: "listing", status: "busy" };
+  if (phase === "working") return { label: "capturing", status: "busy" };
+  if (phase === "recording") return { label: "REC", status: "error" };
+  if (hasError) return { label: "error", status: "error" };
+  if (count === 0) return { label: "no cameras", status: "warn" };
+  return { label: `${count} source${count === 1 ? "" : "s"}`, status: "ok" };
+}
+
+function hintsFor(phase: Phase): Hint[] {
   switch (phase) {
     case "recording":
-      return [{ keys: "s", label: "stop" }];
+      return [
+        { keys: "s", label: "stop" },
+        { keys: "q/Esc", label: "back (keep running)" },
+      ];
     case "result":
       return [
         { keys: "↵", label: "continue" },
-        { keys: "q", label: "back" },
+        { keys: "q/Esc", label: "back" },
       ];
     case "settings":
       return [
@@ -331,7 +378,7 @@ function hintsFor(phase: Phase) {
       return [
         { keys: "↑↓", label: "move" },
         { keys: "↵", label: "select" },
-        { keys: "q", label: "back" },
+        { keys: "q/Esc", label: "back" },
       ];
   }
 }

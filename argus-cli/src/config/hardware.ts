@@ -37,14 +37,21 @@ export const LTE = {
   nmeaPort: "/dev/ttyUSB1",
   /** Atomic telemetry JSON published by the connection-manager daemon. */
   telemetryFile: "/run/sim7600-lte/telemetry.json",
-  /** GNSS_DISABLE pin: pull-up default = 1 = GNSS active. */
-  gnssDisableGpio: 10,
-  /** FULL_CARD_POWER_OFF#: pull-up default = 1 = WWAN powered ON. */
-  fullCardPowerOffGpio: 5,
-  /** WWAN_DISABLE: pull-up default = 1 = WWAN active. */
-  wwanDisableGpio: 11,
-  /** NGFF_RESET#: 1 = reset impulse. */
-  ngffResetGpio: 27,
+  /**
+   * M.2 WWAN control/status straps (v1.0 board User Guide, I/O & Interface
+   * Table). `dir: "out"` pins are togglable from the bench; `dir: "in"` is a
+   * read-only status line. `def` is the hardware-default level and `levels`
+   * maps a raw GPIO level to its documented meaning. NGFF_RESET# is a reset
+   * line: driving it 1 holds the modem in reset, so it must be toggled back
+   * to 0 (Normal) to clear.
+   */
+  controlPins: [
+    { key: "power", signal: "FULL_CARD_POWER_OFF#", gpio: 5,  dir: "out", def: 1, levels: { 0: "WWAN OFF",      1: "WWAN ON" } },
+    { key: "gnss",  signal: "GNSS_DISABLE",         gpio: 10, dir: "out", def: 1, levels: { 0: "GNSS inactive", 1: "GNSS active" } },
+    { key: "wwan",  signal: "WWAN_DISABLE",         gpio: 11, dir: "out", def: 1, levels: { 0: "WWAN inactive", 1: "WWAN active" } },
+    { key: "reset", signal: "NGFF_RESET#",          gpio: 27, dir: "out", def: 0, levels: { 0: "Normal",        1: "Reset (toggle back to clear)" } },
+    { key: "wake",  signal: "WAKE_ON_WAN#",         gpio: 9,  dir: "in",  def: 1, levels: { 0: "Wake event",    1: "Idle" } },
+  ],
 } as const;
 
 /** IMU — BNO085 on I2C1, sharing the bus with the BMS/charger. */
