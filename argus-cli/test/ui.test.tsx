@@ -6,6 +6,7 @@ import { LteScreen } from "../src/screens/LteScreen.js";
 import { ImuScreen } from "../src/screens/ImuScreen.js";
 import { MicScreen } from "../src/screens/MicScreen.js";
 import { LedScreen } from "../src/screens/LedScreen.js";
+import { BoardIdScreen } from "../src/screens/BoardIdScreen.js";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const noop = () => {};
@@ -41,6 +42,7 @@ describe("UI smoke (mock mode)", () => {
     expect(frame).toContain("RGB LED");
     expect(frame).toContain("Microphone");
     expect(frame).toContain("Cameras");
+    expect(frame).toContain("Board ID");
     // …and the right pane previews the default selection (LTE), not the others.
     expect(frame).toContain("Signal"); // LTE detail body
     expect(frame).not.toContain("imx290"); // Camera detail hidden
@@ -171,6 +173,16 @@ describe("UI smoke (mock mode)", () => {
     expect(frame).toContain("RED");
     expect(frame).toContain("GREEN");
     expect(frame).toContain("BLUE");
+    unmount();
+  });
+
+  it("Board ID screen shows the decoded code and part number", async () => {
+    const { lastFrame, unmount } = render(<BoardIdScreen onBack={noop} />);
+    await delay(40);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("000"); // decoded strap code
+    expect(frame).toContain("ARGUS:A:A:00"); // mapped part number
+    expect(frame).toContain("GPIO26"); // per-pin breakdown
     unmount();
   });
 });

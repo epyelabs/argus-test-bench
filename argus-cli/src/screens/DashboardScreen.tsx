@@ -11,6 +11,7 @@ import { ImuScreen } from "./ImuScreen.js";
 import { LedScreen } from "./LedScreen.js";
 import { MicScreen } from "./MicScreen.js";
 import { CameraScreen } from "./CameraScreen.js";
+import { BoardIdScreen } from "./BoardIdScreen.js";
 
 /** Module list — order = list order = the index the dashboard navigates. */
 const MODULES = [
@@ -19,6 +20,7 @@ const MODULES = [
   { id: "mic", title: "Microphone", View: MicScreen },
   { id: "imu", title: "IMU", View: ImuScreen },
   { id: "led", title: "RGB LED", View: LedScreen },
+  { id: "boardId", title: "Board ID", View: BoardIdScreen },
 ] as const;
 
 /** Fixed left-list width; below this terminal width we stack list over detail. */
